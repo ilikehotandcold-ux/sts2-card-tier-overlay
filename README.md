@@ -42,46 +42,76 @@ It is a regular mod for the game's built-in mod loader (`mods/<id>/mod_manifest.
 
 | If after an update… | What happens | How to fix it |
 |---|---|---|
-| Mobalytics changes the tier list | nothing breaks | in-game "Update tiers" button; optionally push it to `data/tiers.json` so everyone gets it |
-| new cards are added | they have no badge | same as above |
+| Mobalytics changes the tier list | nothing breaks | maintainer runs the monthly update; players get it at next start |
+| new cards are added | they have no badge until the tier list includes them | same as above |
 | the game renames a screen | that screen shows no badges | change `_screens` in `data/tiers.json`; it is distributed automatically, no rebuild |
 | the save system changes | the profile patch fails and the game falls back to its normal behaviour (`modded` profile) | rebuild |
 
 - No hooks into specific screen methods. The only Harmony patches are the profile ones, each applied separately: if one fails it is logged and everything else keeps working.
-- At startup the mod downloads `data/tiers.json` from this repo (`raw.githubusercontent.com`, 8 s timeout) and stores it as `tiers.txt` if it is newer than what you have. Offline it uses the last saved copy, or the data built into the DLL.
+- Tier data is fetched from this repo at every game start (see below), so most fixes are a data change, not a new release.
 - It writes a health report to `mods\StsTierOverlay\status.txt`: where the data came from, which components are OK or failed, and which tier list names do not exist in your game version.
 
 ### Your progress
 
 When mods are loaded, the game switches to a separate, empty `modded/` profile (no timeline, no unlocks). This mod declares `"affects_gameplay": false` and, **only if every loaded mod does the same**, keeps your normal profile. If you load any mod that changes gameplay, the original behaviour is kept.
 
-## Updating the tier list
+## How tier updates reach players
 
-Mobalytics blocks automated clients (Cloudflare), so the page is read by you, in your own browser. With the in-game button it takes two clicks:
+```
+ Mobalytics page ──(maintainer, ~1x/month)──▶ data/tiers.json on GitHub ──(automatic)──▶ every player's game
+```
 
-1. On the game's main menu, click **"Update tiers"** (bottom left).
-   - **The first time** a help page opens: drag the **"Update STS2 tiers"** button to your bookmarks bar (`Ctrl+Shift+B` if you can't see it).
-   - After that, it opens the Mobalytics tier list directly.
-2. On Mobalytics, once the page has loaded, click the **"Update STS2 tiers"** bookmark. It downloads `sts2-tiers-DATE.json`.
-3. The game, which is waiting, picks the file up from your Downloads folder within a few seconds and loads the new tiers without restarting. The button shows "Updated: N cards".
+**Players do nothing.** Every time the game starts, the mod downloads [`data/tiers.json`](data/tiers.json) from this repo (`raw.githubusercontent.com`, 8 s timeout) and uses it if its `_updated` date is newer than the copy it already has. Offline, it keeps using the last saved copy, or the data built into the DLL.
 
-If you download the file while the game is closed, it is loaded the next time you start the game.
+**The maintainer updates the repo by hand.** Mobalytics is behind Cloudflare bot protection, so it cannot be read by a bot, a GitHub Action or a scheduled script. Someone has to open the page in a normal browser. It takes about a minute, roughly once a month.
 
-To share it with everyone who has the mod: the bookmark also copies the JSON to your clipboard. Paste it over [`data/tiers.json`](data/tiers.json) on GitHub and commit. The data with the most recent `_updated` date always wins, so GitHub never overwrites a newer local update.
+## Updating the tier list (maintainer)
 
-Without the bookmark: paste [`tools/extract-tiers.js`](tools/extract-tiers.js) into the browser console (F12) on the Mobalytics page. Same result.
+A [GitHub Action](.github/workflows/monthly-reminder.yml) opens a **"Monthly check: Mobalytics tier list"** issue on the 1st of each month, so you get a notification. It never contacts Mobalytics. You can also run it by hand from the *Actions* tab.
 
-`data/tiers.json` format:
+1. **Open** the [Mobalytics card tier list](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards) and wait for it to load.
+2. **Extract.** Run [`tools/extract-tiers.js`](tools/extract-tiers.js) on the page, either way:
+   - **Bookmark (recommended):** once, create a bookmark whose URL is the contents of [`tools/bookmarklet.txt`](tools/bookmarklet.txt). Then just click it on the page.
+   - **Console:** press F12, open *Console*, paste the whole file and press Enter.
+
+   It saves `sts2-tiers-YYYY-MM-DD.json` to your Downloads folder.
+3. **Publish.** In the repo folder, run:
+
+   ```powershell
+   .\tools\publish-tiers.ps1
+   ```
+
+   It takes the newest `sts2-tiers*.json` from Downloads, checks it (at least 300 cards and a date), and shows what changed:
+
+   ```
+   Cards: 424 -> 427   (data date 2026-11-11 -> 2026-12-01)
+   Added (3):
+     + new-card  [Ironclad/A]
+   Moved (2):
+     ~ pommel-strike  Ironclad/S -> Ironclad/A
+   ```
+
+   Confirm with `y` and it writes `data/tiers.json` (keeping the repo's `_screens`), commits and pushes. If nothing changed, it says so and does nothing. Options: `-Path <file>`, `-Yes` (no prompt), `-NoPush`.
+4. **Close the reminder issue.** Every player gets the new tiers the next time they start the game.
+
+No new release or reinstall is needed for tier changes. A new release is only needed when the mod's code changes.
+
+**Offline fallback:** if a player saves a `sts2-tiers*.json` to their own Downloads folder (by running the extract script themselves), the mod imports it at the next game start if it is newer than their current data.
+
+### `data/tiers.json` format
 
 ```json
 {
+  "_source": "https://mobalytics.gg/slay-the-spire-2/tier-lists/cards",
   "_updated": "2026-11-11",
   "_screens": ["CardReward", "ChooseACard", "Merchant"],
   "Ironclad": { "S": ["offering", "dominate"], "A": ["feed"] }
 }
 ```
 
-To use your own tiers on your PC only, edit `mods\StsTierOverlay\tiers.txt` and create an empty `no_update.txt` in the same folder so GitHub does not overwrite it.
+- Card names are Mobalytics slugs (lowercase, dashes). They are matched to the game's card classes ignoring case and dashes.
+- `_screens` lists type-name fragments of the screens that show badges. If a game update renames a screen, fix it here; no rebuild is needed.
+- To use your own tiers on one PC only, edit `mods\StsTierOverlay\tiers.txt` there and create an empty `no_update.txt` in the same folder so GitHub does not overwrite it.
 
 ## Building
 
@@ -92,15 +122,17 @@ Requirements: .NET SDK 8 or newer and the game installed. The .NET 9 SDK is not 
 .\build.ps1 -GameDir "C:\Games\Slay the Spire 2"
 ```
 
-It produces `out/StsTierOverlay-vX.Y.Z.zip`, ready to share. To publish it: `gh release create vX.Y.Z out/StsTierOverlay-vX.Y.Z.zip`.
+It produces `out/StsTierOverlay-vX.Y.Z.zip`, ready to share, and refreshes `tools/bookmarklet.txt`. To publish a code release: `gh release create vX.Y.Z out/StsTierOverlay-vX.Y.Z.zip`.
 
 Layout:
 
 ```
-src/        mod code (TierOverlay.cs, TierUpdater.cs) and mod_manifest.json
+src/        mod code (TierOverlay.cs, DownloadsImport.cs) and mod_manifest.json
 data/       tiers.json: tier list + screen patterns (what the mod downloads)
-installer/  Install.bat, Uninstall.bat, install.ps1, README.txt, update.html template
-tools/      extract-tiers.js: reads the Mobalytics tier list (bookmark / console)
+installer/  Install.bat, Uninstall.bat, install.ps1, README.txt (zip contents)
+tools/      extract-tiers.js + bookmarklet.txt: read the Mobalytics page
+            publish-tiers.ps1: diff, commit and push a new tier list
+.github/    monthly reminder workflow
 ```
 
 ## Credits

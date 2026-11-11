@@ -22,15 +22,9 @@ Install
 Uninstall
   Double-click Uninstall.bat (or disable it in the game's Mods menu).
 
-Updating the tier list (in-game button)
-  Main menu, bottom left: "Update tiers".
-  - The first time it opens a help page: drag the "Update STS2 tiers"
-    button to your browser's bookmarks bar.
-  - After that it opens Mobalytics: click the bookmark and you're done. The
-    game picks the file up from your Downloads folder within a few seconds,
-    no restart needed.
-  The game also downloads the tier list from the GitHub repo at startup if
-  it is newer than yours.
+Tier list updates
+  Automatic. Every time the game starts, the mod downloads the latest tier
+  list from the GitHub repo (if it is newer than yours). Nothing to do.
   If something looks wrong, check  mods\StsTierOverlay\status.txt
 
 Your progress

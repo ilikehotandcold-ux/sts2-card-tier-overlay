@@ -29,15 +29,12 @@ namespace StsTierOverlay;
 [ModInitializer(nameof(Init))]
 public static class TierOverlay
 {
-    public const string Version = "1.2.0";
+    public const string Version = "1.3.0";
     private const string RemoteUrl =
         "https://raw.githubusercontent.com/ilikehotandcold-ux/sts2-card-tier-overlay/main/data/tiers.json";
-    private const string MobalyticsUrl = "https://mobalytics.gg/slay-the-spire-2/tier-lists/cards";
     private const string LocalFile = "tiers.txt";        // .txt: the game reads every *.json in a mod folder as a manifest
     private const string NoUpdateFile = "no_update.txt";
     private const string StatusFile = "status.txt";
-    private const string HelperPage = "update.html";
-    private const string BookmarkOkFile = "bookmark_ok.txt";
     private const string DownloadPattern = "sts2-tiers*.json";
     private const string BadgeMeta = "moba_tier_badge";
 
@@ -72,8 +69,8 @@ public static class TierOverlay
         catch (Exception e) { GD.PrintErr($"[StsTierOverlay] Could not load tiers: {e}"); }
         GD.Print($"[StsTierOverlay] v{Version}: {_data.Tiers.Count} card tiers from {_data.Source}.");
 
-        // Picks up a file the bookmarklet downloaded while the game was closed.
-        try { TierUpdater.ImportFromDownloads(); }
+        // Offline fallback: a tier file saved to Downloads by tools/extract-tiers.js.
+        try { DownloadsImport.Run(); }
         catch (Exception e) { GD.PrintErr($"[StsTierOverlay] Downloads check failed: {e.Message}"); }
 
         ApplyPatches();
@@ -164,16 +161,13 @@ public static class TierOverlay
         }
     }
 
-    /// <summary>
-    /// Saves and activates new tier data unless what we already have is newer (by "_updated").
-    /// <paramref name="force"/> skips the date check (manual update from Mobalytics).
-    /// </summary>
-    internal static bool TryApply(string json, TierData fresh, bool force = false)
+    /// <summary>Saves and activates new tier data unless what we already have is newer (by "_updated").</summary>
+    internal static bool TryApply(string json, TierData fresh)
     {
         if (_modDir == null || fresh.Tiers.Count < 50) return false; // refuse obviously broken data
         lock (SaveLock)
         {
-            if (!force && string.CompareOrdinal(fresh.Updated, _data.Updated) < 0) return false;
+            if (string.CompareOrdinal(fresh.Updated, _data.Updated) < 0) return false;
             string path = Path.Combine(_modDir, LocalFile);
             string? old = File.Exists(path) ? File.ReadAllText(path) : null;
             if (old != json) File.WriteAllText(path, json, new UTF8Encoding(false));
@@ -185,11 +179,6 @@ public static class TierOverlay
 
     internal static TierData ParseFile(string json, string source) => Parse(json, source);
     internal static string? ModDir => _modDir;
-    internal static int CardCount => _data.Tiers.Count;
-    internal static string DataDate => _data.Updated;
-    internal static string MobalyticsPage => MobalyticsUrl;
-    internal static string HelperPageFile => HelperPage;
-    internal static string BookmarkOk => BookmarkOkFile;
     internal static string DownloadFilePattern => DownloadPattern;
 
     private static string Normalize(string s) =>
@@ -209,10 +198,6 @@ public static class TierOverlay
         {
             // Parent chain and Model are complete by the next idle step.
             Callable.From(() => Evaluate(card)).CallDeferred();
-        }
-        else if (node is Control menu && node.GetType().Name == "NMainMenu")
-        {
-            Callable.From(() => TierUpdater.AddButton(menu)).CallDeferred();
         }
     }
 

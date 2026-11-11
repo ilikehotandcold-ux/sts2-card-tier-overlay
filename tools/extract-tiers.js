@@ -1,11 +1,11 @@
-// Extracts the Mobalytics Slay the Spire 2 card tier list in the format of data/tiers.json.
+// Reads the Mobalytics Slay the Spire 2 card tier list and saves it in the format of data/tiers.json.
 //
-// Used two ways (same code):
-//  * Bookmarklet "Update STS2 tiers" (build.ps1 embeds it in the mod's update.html).
-//  * Or paste it in the browser console (F12) on https://mobalytics.gg/slay-the-spire-2/tier-lists/cards
+// Maintainer tool (see "Updating the tier list" in README.md). Run it on
+// https://mobalytics.gg/slay-the-spire-2/tier-lists/cards once the page has loaded, either:
+//  * as a bookmark: create a bookmark whose URL is the contents of tools/bookmarklet.txt, or
+//  * by pasting this whole file into the browser console (F12 > Console).
 //
-// It downloads sts2-tiers-YYYY-MM-DD.json (the game mod picks it up from the Downloads folder)
-// and copies the same JSON to the clipboard (to paste over data/tiers.json in the repo).
+// It downloads sts2-tiers-YYYY-MM-DD.json to your Downloads folder; then run tools/publish-tiers.ps1.
 (() => {
   if (!/mobalytics\.gg\/slay-the-spire-2\/tier-lists\/cards/.test(location.href)) {
     alert('Open the Mobalytics card tier list first:\nhttps://mobalytics.gg/slay-the-spire-2/tier-lists/cards');
@@ -39,25 +39,17 @@
   }
   const count = Object.values(tiers).reduce((a, t) => a + Object.values(t).flat().length, 0);
   if (count < 50) {
-    alert('Only found ' + count + ' cards. Wait for the page to finish loading and click again.');
+    alert('Only found ' + count + ' cards. Wait for the page to finish loading and try again.');
     return;
   }
   const date = new Date().toISOString().slice(0, 10);
-  const json = JSON.stringify({
-    _source: location.href.split('#')[0],
-    _updated: date,
-    // Type-name fragments of the screens whose cards get a badge. Edit if a game update renames them.
-    _screens: ['CardReward', 'ChooseACard', 'Merchant'],
-    ...tiers,
-  }, null, 2);
-
+  // _screens is kept from the repo's current data/tiers.json by publish-tiers.ps1.
+  const json = JSON.stringify({ _source: location.href.split('#')[0], _updated: date, ...tiers }, null, 2);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
   a.download = 'sts2-tiers-' + date + '.json';
   document.body.appendChild(a);
   a.click();
-  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-  try { navigator.clipboard.writeText(json); } catch (e) { /* clipboard is optional */ }
-
-  alert(count + ' cards downloaded.\n\nThe game will load them in a few seconds.\n(The JSON is also on your clipboard, in case you want to update the repo.)');
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+  alert(count + ' cards saved to Downloads as ' + a.download + '.\nNext: run tools/publish-tiers.ps1');
 })();

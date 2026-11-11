@@ -38,12 +38,11 @@ foreach ($f in 'Install.bat', 'Uninstall.bat', 'install.ps1', 'README.txt') {
     Copy-Item (Join-Path $root "installer\$f") $stage
 }
 
-# Helper page with the "Update STS2 tiers" bookmarklet (opened by the in-game button the first time).
-# encodeURIComponent-style escaping keeps newlines, so // comments in the script stay valid.
+# Keep the maintainer bookmark (tools/bookmarklet.txt) in sync with tools/extract-tiers.js.
+# Percent-encoding keeps the newlines, so // comments in the script stay valid inside the URL.
 $js = Get-Content -LiteralPath (Join-Path $root 'tools\extract-tiers.js') -Raw -Encoding UTF8
 $escaped = [Uri]::EscapeDataString($js) -replace "'", '%27' -replace '\(', '%28' -replace '\)', '%29' -replace '!', '%21' -replace '\*', '%2A'
-$html = (Get-Content -LiteralPath (Join-Path $root 'installer\update.template.html') -Raw -Encoding UTF8).Replace('__BOOKMARKLET__', "javascript:$escaped")
-[IO.File]::WriteAllText((Join-Path $modDir 'update.html'), $html, (New-Object Text.UTF8Encoding $false))
+[IO.File]::WriteAllText((Join-Path $root 'tools\bookmarklet.txt'), "javascript:$escaped", (New-Object Text.UTF8Encoding $false))
 
 $zip = Join-Path $root "out\$name.zip"
 if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }

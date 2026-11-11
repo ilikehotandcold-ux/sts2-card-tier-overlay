@@ -81,7 +81,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $source "$ModId.dll"))) {
 }
 
 # Keep what the player already has (newer downloaded tiers, settings, update history).
-$keep = 'tiers.txt', 'no_update.txt', 'bookmark_ok.txt', 'last_import.txt'
+$keep = 'tiers.txt', 'no_update.txt', 'last_import.txt'
 $saved = @{}
 foreach ($f in $keep) {
     $p = Join-Path $target $f
@@ -105,3 +105,4 @@ foreach ($f in $saved.Keys) {
 Write-Host ''
 Write-Host "Installed to: $target" -ForegroundColor Green
 Write-Host 'Start the game. If it asks whether to load mods, say yes.'
+
