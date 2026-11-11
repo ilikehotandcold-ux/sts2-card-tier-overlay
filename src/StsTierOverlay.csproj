@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Build:  dotnet build src -c Release -p:GameDir="C:\path\to\Slay the Spire 2"
+    (or just run build.ps1, which finds the game and packages the release zip)
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>StsTierOverlay</AssemblyName>
+    <RootNamespace>StsTierOverlay</RootNamespace>
+    <Version>1.1.0</Version>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- The game runs on .NET 9: compile against the game's own runtime assemblies instead of the SDK's. -->
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <GameData>$(GameDir)\data_sts2_windows_x86_64</GameData>
+  </PropertyGroup>
+  <Target Name="CheckGameDir" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(GameDir)'=='' Or !Exists('$(GameData)\sts2.dll')"
+           Text="Set GameDir to the Slay the Spire 2 folder (the one with SlayTheSpire2.exe), e.g. -p:GameDir=&quot;C:\Games\Slay the Spire 2&quot;" />
+  </Target>
+  <ItemGroup>
+    <Reference Include="$(GameData)\System.Private.CoreLib.dll;$(GameData)\System.Runtime.dll;$(GameData)\System.Collections.dll;$(GameData)\System.Linq.dll;$(GameData)\System.Text.Json.dll;$(GameData)\System.Memory.dll;$(GameData)\System.Runtime.InteropServices.dll;$(GameData)\netstandard.dll;$(GameData)\System.ObjectModel.dll;$(GameData)\System.Console.dll;$(GameData)\System.Net.Http.dll;$(GameData)\System.Net.Primitives.dll;$(GameData)\System.Threading.dll;$(GameData)\System.Threading.Tasks.dll;$(GameData)\System.Private.Uri.dll">
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="$(GameData)\sts2.dll;$(GameData)\GodotSharp.dll;$(GameData)\0Harmony.dll">
+      <Private>false</Private>
+    </Reference>
+    <EmbeddedResource Include="..\data\tiers.json" LogicalName="tiers.txt" />
+  </ItemGroup>
+</Project>

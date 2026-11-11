@@ -1,0 +1,12 @@
+{
+  "id": "StsTierOverlay",
+  "name": "Card Tier Overlay (Mobalytics)",
+  "author": "ilikehotandcold-ux",
+  "description": "Shows the Mobalytics tier (S/A/B/C/D) on cards offered in card rewards, choose-a-card screens and the shop.\r\n\r\nhttps://github.com/ilikehotandcold-ux/sts2-card-tier-overlay",
+  "version": "1.1.0",
+  "has_pck": false,
+  "has_dll": true,
+  "dependencies": [],
+  "affects_gameplay": false,
+  "min_game_version": "0.107.0"
+}
