@@ -1,12 +1,13 @@
-# Card Tier Overlay for Slay the Spire 2
+# Card & Relic Tier Overlay for Slay the Spire 2
 
 > 🤖 **Made with [Claude Code](https://claude.com/claude-code) using Claude Opus 5.5 (high effort)**: code, installer, docs and everything else.
 
-A **Slay the Spire 2** mod that shows the tier from the [Mobalytics card tier list](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards) (**S / A / B / C / D**) on the corner of every card you are offered:
+A **Slay the Spire 2** mod that shows the tier from the Mobalytics [card](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards) and [relic](https://mobalytics.gg/slay-the-spire-2/tier-lists/relics) tier lists (**S / A / B / C / D**) as a small badge on everything you are offered:
 
-- card rewards after a fight
-- "choose a card" screens
-- the merchant's shop
+- **Cards:** card rewards after a fight, "choose a card" screens, the merchant.
+- **Relics:** treasure chests, "choose a relic" screens, relic rewards after elites, the merchant.
+
+The badge sits on the top-right corner, so the energy cost stays visible. It's a dark disc with a colored ring and letter:
 
 | Tier | Color  |
 |------|--------|
@@ -16,7 +17,7 @@ A **Slay the Spire 2** mod that shows the tier from the [Mobalytics card tier li
 | C    | green  |
 | D    | blue   |
 
-It ships with the Ironclad, Silent, Regent, Necrobinder, Defect and multiplayer tier lists (424 cards). Cards without a tier (basic, colorless, curses…) get no badge. Nothing is shown during combat.
+Ships with 424 card tiers (Ironclad, Silent, Regent, Necrobinder, Defect, multiplayer) and 166 relic tiers. Things without a tier (basic cards, curses, unrated relics…) get no badge. Nothing is shown during combat or in your relic bar.
 
 ## Install
 
@@ -35,15 +36,15 @@ Manual install: copy the `StsTierOverlay` folder from the zip into `Slay the Spi
 
 It is a regular mod for the game's built-in mod loader (`mods/<id>/mod_manifest.json` + DLL). It does not matter how the game is launched: `SlayTheSpire2.exe` loads it itself.
 
-- **Finding cards:** every card node (`NCard`) that enters the scene is checked. If one of its parents has a type name containing one of the `_screens` patterns (by default `CardReward`, `ChooseACard`, `Merchant`), it gets a badge. When the card leaves that screen the badge is removed; the game recycles card nodes, so badges never reach your hand.
-- **Matching cards:** the card's class name (`PommelStrike`) is compared with the Mobalytics name (`pommel-strike`), ignoring case and dashes. Works with the game in any language.
+- **Finding cards and relics:** every card node (`NCard`) and relic node (`NRelic`) that enters the scene is checked. If one of its parents has a type name containing one of the `_screens` patterns from `data/tiers.json` (cards: `CardReward`, `ChooseACard`, `Merchant`; relics: `TreasureRoomRelic`, `ChooseARelic`, `Merchant`), it gets a badge. Relic entries in the post-combat reward list are handled separately. Badges are removed when the node leaves the screen; the game recycles nodes, so badges never reach your hand or relic bar.
+- **Matching names:** the game's class name (`PommelStrike`, `ChosenCheese`) is compared with the Mobalytics name (`pommel-strike`, `the-chosen-cheese`), ignoring case, dashes and a leading "the". Works with the game in any language.
 
 ### Built to survive game updates
 
 | If after an update… | What happens | How to fix it |
 |---|---|---|
-| Mobalytics changes the tier list | nothing breaks | maintainer runs the monthly update; players get it at next start |
-| new cards are added | they have no badge until the tier list includes them | same as above |
+| Mobalytics changes a tier list | nothing breaks | maintainer runs the monthly update; players get it at next start |
+| new cards or relics are added | they have no badge until the tier list includes them | same as above |
 | the game renames a screen | that screen shows no badges | change `_screens` in `data/tiers.json`; it is distributed automatically, no rebuild |
 | the save system changes | the profile patch fails and the game falls back to its normal behaviour (`modded` profile) | rebuild |
 
@@ -58,58 +59,64 @@ When mods are loaded, the game switches to a separate, empty `modded/` profile (
 ## How tier updates reach players
 
 ```
- Mobalytics page ──(maintainer, ~1x/month)──▶ data/tiers.json on GitHub ──(automatic)──▶ every player's game
+ Mobalytics pages ──(maintainer, ~1x/month)──▶ data/tiers.json on GitHub ──(automatic)──▶ every player's game
 ```
 
-**Players do nothing.** Every time the game starts, the mod downloads [`data/tiers.json`](data/tiers.json) from this repo (`raw.githubusercontent.com`, 8 s timeout) and uses it if its `_updated` date is newer than the copy it already has. Offline, it keeps using the last saved copy, or the data built into the DLL.
+**Players do nothing.** Every time the game starts, the mod downloads [`data/tiers.json`](data/tiers.json) from this repo (`raw.githubusercontent.com`, 8 s timeout) and uses it if its `_updated` date is at least as new as the copy it already has. Offline, it keeps using the last saved copy, or the data built into the DLL.
 
-**The maintainer updates the repo by hand.** Mobalytics is behind Cloudflare bot protection, so it cannot be read by a bot, a GitHub Action or a scheduled script. Someone has to open the page in a normal browser. It takes about a minute, roughly once a month.
+**The maintainer updates the repo by hand.** Mobalytics is behind Cloudflare bot protection, so it cannot be read by a bot, a GitHub Action or a scheduled script. Someone has to open the pages in a normal browser. It takes a couple of minutes, roughly once a month.
 
-## Updating the tier list (maintainer)
+## Updating the tier lists (maintainer)
 
 A [GitHub Action](.github/workflows/monthly-reminder.yml) opens a **"Monthly check: Mobalytics tier list"** issue on the 1st of each month, so you get a notification. It never contacts Mobalytics. You can also run it by hand from the *Actions* tab.
 
-1. **Open** the [Mobalytics card tier list](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards) and wait for it to load.
+1. **Open** the [card tier list](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards) and wait for it to load.
 2. **Extract.** Run [`tools/extract-tiers.js`](tools/extract-tiers.js) on the page, either way:
    - **Bookmark (recommended):** once, create a bookmark whose URL is the contents of [`tools/bookmarklet.txt`](tools/bookmarklet.txt). Then just click it on the page.
    - **Console:** press F12, open *Console*, paste the whole file and press Enter.
 
-   It saves `sts2-tiers-YYYY-MM-DD.json` to your Downloads folder.
-3. **Publish.** In the repo folder, run:
+   It saves `sts2-cards-YYYY-MM-DD.json` to your Downloads folder.
+3. **Repeat on the [relic tier list](https://mobalytics.gg/slay-the-spire-2/tier-lists/relics).** Same bookmark; it saves `sts2-relics-YYYY-MM-DD.json`. You can skip a page you know didn't change.
+4. **Publish.** In the repo folder, run:
 
    ```powershell
    .\tools\publish-tiers.ps1
    ```
 
-   It takes the newest `sts2-tiers*.json` from Downloads, checks it (at least 300 cards and a date), and shows what changed:
+   It takes the newest `sts2-cards*.json` and `sts2-relics*.json` from Downloads, checks them, and shows what changed:
 
    ```
-   Cards: 424 -> 427   (data date 2026-11-11 -> 2026-12-01)
-   Added (3):
-     + new-card  [Ironclad/A]
-   Moved (2):
-     ~ pommel-strike  Ironclad/S -> Ironclad/A
+   CARDS from sts2-cards-2026-12-01.json: 424 -> 425
+     Added (1):
+       + new-card  [Ironclad/A]
+     Moved (1):
+       ~ offering  Ironclad/S -> Ironclad/B
+
+   RELICS from sts2-relics-2026-12-01.json: 166 -> 166
+     No changes.
    ```
 
-   Confirm with `y` and it writes `data/tiers.json` (keeping the repo's `_screens`), commits and pushes. If nothing changed, it says so and does nothing. Options: `-Path <file>`, `-Yes` (no prompt), `-NoPush`.
-4. **Close the reminder issue.** Every player gets the new tiers the next time they start the game.
+   Confirm with `y` and it writes `data/tiers.json` (keeping the repo's `_screens`), commits and pushes. If nothing changed, it says so and does nothing. Options: `-Path <files>`, `-Yes` (no prompt), `-NoPush`.
+5. **Close the reminder issue.** Every player gets the new tiers the next time they start the game.
 
 No new release or reinstall is needed for tier changes. A new release is only needed when the mod's code changes.
-
-**Offline fallback:** if a player saves a `sts2-tiers*.json` to their own Downloads folder (by running the extract script themselves), the mod imports it at the next game start if it is newer than their current data.
 
 ### `data/tiers.json` format
 
 ```json
 {
-  "_source": "https://mobalytics.gg/slay-the-spire-2/tier-lists/cards",
   "_updated": "2026-11-11",
-  "_screens": ["CardReward", "ChooseACard", "Merchant"],
-  "Ironclad": { "S": ["offering", "dominate"], "A": ["feed"] }
+  "_sources": { "cards": "https://mobalytics.gg/…/cards", "relics": "https://mobalytics.gg/…/relics" },
+  "_screens": {
+    "cards":  ["CardReward", "ChooseACard", "Merchant"],
+    "relics": ["TreasureRoomRelic", "ChooseARelic", "Merchant"]
+  },
+  "cards":  { "Ironclad": { "S": ["offering", "dominate"], "A": ["feed"] } },
+  "relics": { "S": ["pocketwatch"], "A": ["kunai"] }
 }
 ```
 
-- Card names are Mobalytics slugs (lowercase, dashes). They are matched to the game's card classes ignoring case and dashes.
+- Names are Mobalytics slugs (lowercase, dashes). Inside `cards` and `relics`, any grouping works: every list under an `S`/`A`/`B`/`C`/`D` key is read.
 - `_screens` lists type-name fragments of the screens that show badges. If a game update renames a screen, fix it here; no rebuild is needed.
 - To use your own tiers on one PC only, edit `mods\StsTierOverlay\tiers.txt` there and create an empty `no_update.txt` in the same folder so GitHub does not overwrite it.
 
@@ -127,16 +134,16 @@ It produces `out/StsTierOverlay-vX.Y.Z.zip`, ready to share, and refreshes `tool
 Layout:
 
 ```
-src/        mod code (TierOverlay.cs, DownloadsImport.cs) and mod_manifest.json
-data/       tiers.json: tier list + screen patterns (what the mod downloads)
+src/        mod code: TierOverlay.cs (startup, sync, watcher), TierData.cs, Badges.cs, ProfilePatches.cs
+data/       tiers.json: card + relic tier lists and screen patterns (what the mod downloads)
 installer/  Install.bat, Uninstall.bat, install.ps1, README.txt (zip contents)
-tools/      extract-tiers.js + bookmarklet.txt: read the Mobalytics page
-            publish-tiers.ps1: diff, commit and push a new tier list
+tools/      extract-tiers.js + bookmarklet.txt: read the Mobalytics pages
+            publish-tiers.ps1: diff, commit and push new tier lists
 .github/    monthly reminder workflow
 ```
 
 ## Credits
 
 - Made with [Claude Code](https://claude.com/claude-code) using **Claude Opus 5.5 (high effort)**.
-- Tier list: [Mobalytics](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards). This project is not affiliated with Mobalytics or Mega Crit.
+- Tier lists: [Mobalytics](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards). This project is not affiliated with Mobalytics or Mega Crit.
 - Code under the [MIT](LICENSE) license.

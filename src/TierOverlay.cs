@@ -3,63 +3,45 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes.Cards;
-using MegaCrit.Sts2.Core.Saves;
+using MegaCrit.Sts2.Core.Nodes.Relics;
+using MegaCrit.Sts2.Core.Nodes.Rewards;
+using MegaCrit.Sts2.Core.Rewards;
 
 namespace StsTierOverlay;
 
 /// <summary>
-/// Shows the Mobalytics tier (S/A/B/C/D) as a badge on cards offered in card rewards,
-/// "choose a card" screens and the merchant.
+/// Shows the Mobalytics tier (S/A/B/C/D) as a small badge on cards and relics you are offered:
+/// card rewards, "choose a card", treasure chests, "choose a relic", relic rewards and the merchant.
 ///
 /// Built to survive game updates:
-///  * No hooks into specific screen methods. Every NCard that enters the scene tree is checked, and it gets a
-///    badge when one of its ancestors' type names contains a "screen pattern" (e.g. "CardReward", "Merchant").
-///  * Screen patterns and tiers live in a JSON file that is refreshed from GitHub at startup, so a renamed
-///    screen or a new tier list can be fixed for everyone by editing data/tiers.json in the repo.
+///  * No hooks into specific screen methods. Every card/relic node that enters the scene tree is checked, and it
+///    gets a badge when one of its ancestors' type names contains a "screen pattern" (e.g. "CardReward").
+///  * Screen patterns and tiers live in data/tiers.json, downloaded from GitHub at every start, so a renamed
+///    screen or a new tier list is fixed for everyone by editing that file in the repo.
 ///  * The only Harmony patches (keeping the normal save profile) are applied one by one and may fail safely.
 ///  * A health report (status.txt) is written next to the DLL.
 /// </summary>
 [ModInitializer(nameof(Init))]
 public static class TierOverlay
 {
-    public const string Version = "1.3.0";
+    public const string Version = "1.4.0";
     private const string RemoteUrl =
         "https://raw.githubusercontent.com/ilikehotandcold-ux/sts2-card-tier-overlay/main/data/tiers.json";
     private const string LocalFile = "tiers.txt";        // .txt: the game reads every *.json in a mod folder as a manifest
     private const string NoUpdateFile = "no_update.txt";
     private const string StatusFile = "status.txt";
-    private const string DownloadPattern = "sts2-tiers*.json";
-    private const string BadgeMeta = "moba_tier_badge";
-
-    internal sealed class TierData
-    {
-        public Dictionary<string, string> Tiers = new();          // normalized card name -> "S".."D"
-        public string[] ScreenPatterns = { "CardReward", "ChooseACard", "Merchant" };
-        public List<string> RawNames = new();                    // for the health report
-        public string Source = "";
-        public string Updated = "";                              // "yyyy-MM-dd" from "_updated"; newest wins
-    }
+    private const string WatchMeta = "moba_tier_watch";
 
     private static volatile TierData _data = new();
     private static readonly object SaveLock = new();
-    private static readonly List<string> PatchReport = new();
+    private static readonly List<string> Report = new();
     private static string? _modDir;
-
-    private static readonly Dictionary<string, Color> TierColors = new()
-    {
-        ["S"] = new Color("ff4d4d"),
-        ["A"] = new Color("ff9a2e"),
-        ["B"] = new Color("ffd93b"),
-        ["C"] = new Color("6fd65a"),
-        ["D"] = new Color("59a8ff"),
-    };
 
     public static void Init()
     {
@@ -67,24 +49,19 @@ public static class TierOverlay
 
         try { _data = LoadLocal(); }
         catch (Exception e) { GD.PrintErr($"[StsTierOverlay] Could not load tiers: {e}"); }
-        GD.Print($"[StsTierOverlay] v{Version}: {_data.Tiers.Count} card tiers from {_data.Source}.");
-
-        // Offline fallback: a tier file saved to Downloads by tools/extract-tiers.js.
-        try { DownloadsImport.Run(); }
-        catch (Exception e) { GD.PrintErr($"[StsTierOverlay] Downloads check failed: {e.Message}"); }
+        GD.Print($"[StsTierOverlay] v{Version}: {_data.Cards.Count} cards, {_data.Relics.Count} relics from {_data.Source}.");
 
         ApplyPatches();
 
         try
         {
-            var tree = (SceneTree)Engine.GetMainLoop();
-            tree.NodeAdded += OnNodeAdded;
-            PatchReport.Add("OK   card watcher (SceneTree.NodeAdded)");
+            ((SceneTree)Engine.GetMainLoop()).NodeAdded += OnNodeAdded;
+            Report.Add("OK   watcher (SceneTree.NodeAdded)");
         }
         catch (Exception e)
         {
-            PatchReport.Add($"FAIL card watcher: {e.Message}");
-            GD.PrintErr($"[StsTierOverlay] Card watcher failed: {e}");
+            Report.Add($"FAIL watcher: {e.Message}");
+            GD.PrintErr($"[StsTierOverlay] Watcher failed: {e}");
         }
 
         WriteStatus();
@@ -98,47 +75,12 @@ public static class TierOverlay
         string? path = _modDir == null ? null : Path.Combine(_modDir, LocalFile);
         if (path != null && File.Exists(path))
         {
-            try { return Parse(File.ReadAllText(path), LocalFile); }
+            try { return TierData.Parse(File.ReadAllText(path), LocalFile); }
             catch (Exception e) { GD.PrintErr($"[StsTierOverlay] {LocalFile} is invalid, using built-in data: {e.Message}"); }
         }
         using Stream s = typeof(TierOverlay).Assembly.GetManifestResourceStream("tiers.txt")!;
         using var r = new StreamReader(s);
-        return Parse(r.ReadToEnd(), "built-in");
-    }
-
-    /// <summary>{ "_screens": [...], "Ironclad": { "S": ["offering", ...], ... }, ... }</summary>
-    private static TierData Parse(string json, string source)
-    {
-        var data = new TierData { Source = source };
-        using JsonDocument doc = JsonDocument.Parse(json);
-        foreach (JsonProperty prop in doc.RootElement.EnumerateObject())
-        {
-            if (prop.Name == "_updated" && prop.Value.ValueKind == JsonValueKind.String)
-            {
-                data.Updated = prop.Value.GetString() ?? "";
-                continue;
-            }
-            if (prop.Name == "_screens" && prop.Value.ValueKind == JsonValueKind.Array)
-            {
-                string[] patterns = prop.Value.EnumerateArray().Select(e => e.GetString() ?? "").Where(p => p.Length > 0).ToArray();
-                if (patterns.Length > 0) data.ScreenPatterns = patterns;
-                continue;
-            }
-            if (prop.Name.StartsWith("_") || prop.Value.ValueKind != JsonValueKind.Object) continue;
-
-            foreach (JsonProperty tier in prop.Value.EnumerateObject())
-            {
-                if (tier.Value.ValueKind != JsonValueKind.Array) continue;
-                foreach (JsonElement card in tier.Value.EnumerateArray())
-                {
-                    string slug = card.GetString() ?? "";
-                    if (slug.EndsWith("-plus")) slug = slug[..^5];
-                    if (data.Tiers.TryAdd(Normalize(slug), tier.Name.ToUpperInvariant())) data.RawNames.Add(slug);
-                }
-            }
-        }
-        if (data.Tiers.Count == 0) throw new InvalidDataException("no cards found");
-        return data;
+        return TierData.Parse(r.ReadToEnd(), "built-in");
     }
 
     private static async Task UpdateFromGitHub()
@@ -149,76 +91,89 @@ public static class TierOverlay
             using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(8) };
             http.DefaultRequestHeaders.UserAgent.ParseAdd("StsTierOverlay/" + Version);
             string json = await http.GetStringAsync(RemoteUrl).ConfigureAwait(false);
-            TierData fresh = Parse(json, "GitHub");
-            if (TryApply(json, fresh))
-                GD.Print($"[StsTierOverlay] Tiers updated from GitHub: {fresh.Tiers.Count} cards ({fresh.Updated}).");
-            else
-                GD.Print($"[StsTierOverlay] GitHub tiers ({fresh.Updated}) are not newer than local ({_data.Updated}); kept local.");
+            TierData fresh = TierData.Parse(json, "GitHub");
+            if (fresh.Cards.Count + fresh.Relics.Count < 50) return; // refuse obviously broken data
+
+            lock (SaveLock)
+            {
+                // Newest data wins, so a broken or older remote file never replaces newer local data.
+                if (string.CompareOrdinal(fresh.Updated, _data.Updated) < 0) return;
+                string path = Path.Combine(_modDir, LocalFile);
+                string? old = File.Exists(path) ? File.ReadAllText(path) : null;
+                if (old != json) File.WriteAllText(path, json, new UTF8Encoding(false));
+                _data = fresh;
+            }
+            GD.Print($"[StsTierOverlay] Tiers synced from GitHub ({fresh.Updated}): {fresh.Cards.Count} cards, {fresh.Relics.Count} relics.");
+            WriteStatus();
         }
         catch (Exception e)
         {
-            GD.Print($"[StsTierOverlay] Online update skipped ({e.GetType().Name}); using {_data.Source}.");
+            GD.Print($"[StsTierOverlay] GitHub sync skipped ({e.GetType().Name}); using {_data.Source}.");
         }
-    }
-
-    /// <summary>Saves and activates new tier data unless what we already have is newer (by "_updated").</summary>
-    internal static bool TryApply(string json, TierData fresh)
-    {
-        if (_modDir == null || fresh.Tiers.Count < 50) return false; // refuse obviously broken data
-        lock (SaveLock)
-        {
-            if (string.CompareOrdinal(fresh.Updated, _data.Updated) < 0) return false;
-            string path = Path.Combine(_modDir, LocalFile);
-            string? old = File.Exists(path) ? File.ReadAllText(path) : null;
-            if (old != json) File.WriteAllText(path, json, new UTF8Encoding(false));
-            _data = fresh;
-        }
-        WriteStatus();
-        return true;
-    }
-
-    internal static TierData ParseFile(string json, string source) => Parse(json, source);
-    internal static string? ModDir => _modDir;
-    internal static string DownloadFilePattern => DownloadPattern;
-
-    private static string Normalize(string s) =>
-        new string(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
-
-    private static string? TierFor(CardModel? model)
-    {
-        if (model == null) return null;
-        return _data.Tiers.TryGetValue(Normalize(model.GetType().Name), out string? t) ? t : null;
     }
 
     // ---------------------------------------------------------------- watcher
 
     private static void OnNodeAdded(Node node)
     {
-        if (node is NCard card)
+        switch (node)
         {
-            // Parent chain and Model are complete by the next idle step.
-            Callable.From(() => Evaluate(card)).CallDeferred();
+            case NCard card:
+                // Parent chain and Model are complete by the next idle step.
+                Callable.From(() => Safe(() => EvaluateCard(card))).CallDeferred();
+                break;
+            case NRelic relic:
+                if (!relic.HasMeta(WatchMeta))
+                {
+                    // Some holders (treasure chest) create the node first and set the relic later.
+                    relic.SetMeta(WatchMeta, true);
+                    relic.ModelChanged += (_, _) => Callable.From(() => Safe(() => EvaluateRelic(relic, refresh: true))).CallDeferred();
+                }
+                Callable.From(() => Safe(() => EvaluateRelic(relic, refresh: false))).CallDeferred();
+                break;
+            default:
+                if (node is Control button && node.GetType().Name.Contains("RewardButton"))
+                    Callable.From(() => Safe(() => RewardButtonHook.Evaluate(button))).CallDeferred();
+                break;
         }
     }
 
-    private static void Evaluate(NCard card)
+    private static void Safe(Action action)
     {
-        try
-        {
-            if (!GodotObject.IsInstanceValid(card) || !card.IsInsideTree()) return;
-            if (FindBadge(card) != null || !IsInOfferScreen(card)) return;
-            Decorate(card);
-        }
-        catch (Exception e)
-        {
-            GD.PrintErr($"[StsTierOverlay] {e.Message}");
-        }
+        try { action(); }
+        catch (Exception e) { GD.PrintErr($"[StsTierOverlay] {e.GetType().Name}: {e.Message}"); }
     }
 
-    private static bool IsInOfferScreen(Node card)
+    private static void EvaluateCard(NCard card)
     {
-        string[] patterns = _data.ScreenPatterns;
-        for (Node? n = card.GetParent(); n != null; n = n.GetParent())
+        if (!GodotObject.IsInstanceValid(card) || !card.IsInsideTree() || Badges.Has(card)) return;
+        TierData data = _data;
+        if (card.Model == null || !InScreen(card, data.CardScreens)) return;
+        string? tier = TierData.Lookup(data.Cards, card.Model.GetType().Name);
+        if (tier != null) Badges.AddToCard(card, tier);
+    }
+
+    private static void EvaluateRelic(NRelic relic, bool refresh)
+    {
+        if (!GodotObject.IsInstanceValid(relic) || !relic.IsInsideTree()) return;
+        if (refresh) Badges.Remove(relic);
+        else if (Badges.Has(relic)) return;
+
+        RelicModel model;
+        try { model = relic.Model; }
+        catch (InvalidOperationException) { return; } // relic not assigned yet; ModelChanged will call us again
+
+        TierData data = _data;
+        if (!InScreen(relic, data.RelicScreens)) return;
+        string? tier = TierData.Lookup(data.Relics, model.GetType().Name);
+        if (tier != null) Badges.AddToRelic(relic, tier);
+    }
+
+    internal static string? RelicTier(RelicModel model) => TierData.Lookup(_data.Relics, model.GetType().Name);
+
+    private static bool InScreen(Node node, string[] patterns)
+    {
+        for (Node? n = node.GetParent(); n != null; n = n.GetParent())
         {
             string typeName = n.GetType().Name;
             foreach (string p in patterns)
@@ -227,90 +182,6 @@ public static class TierOverlay
             }
         }
         return false;
-    }
-
-    // ---------------------------------------------------------------- badge
-
-    private static Control? FindBadge(NCard card) =>
-        card.GetChildren().OfType<Control>().FirstOrDefault(c => c.HasMeta(BadgeMeta) && !c.IsQueuedForDeletion());
-
-    private static void Decorate(NCard card)
-    {
-        string? tier = TierFor(card.Model);
-        if (tier == null) return;
-
-        Color color = TierColors.TryGetValue(tier, out Color c) ? c : Colors.White;
-        const float size = 64f;
-
-        var style = new StyleBoxFlat
-        {
-            BgColor = color,
-            BorderColor = new Color(0.08f, 0.06f, 0.05f),
-            ShadowColor = new Color(0, 0, 0, 0.6f),
-            ShadowSize = 6,
-        };
-        style.SetBorderWidthAll(4);
-        style.SetCornerRadiusAll((int)(size / 2));
-
-        var panel = new Panel
-        {
-            Name = "MobaTierBadge",
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-            Size = new Vector2(size, size),
-            Position = CardTopLeft(card) - new Vector2(14f, 14f),
-        };
-        panel.SetMeta(BadgeMeta, true);
-        panel.AddThemeStyleboxOverride("panel", style);
-
-        var label = new Label
-        {
-            Text = tier,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-            Size = new Vector2(size, size),
-        };
-        label.AddThemeFontSizeOverride("font_size", 42);
-        label.AddThemeColorOverride("font_color", new Color(0.1f, 0.07f, 0.05f));
-        label.AddThemeColorOverride("font_outline_color", new Color(1f, 1f, 1f, 0.85f));
-        label.AddThemeConstantOverride("outline_size", 4);
-        Font? gameFont = FindGameFont(card);
-        if (gameFont != null) label.AddThemeFontOverride("font", gameFont);
-        panel.AddChild(label);
-
-        card.AddChild(panel);
-
-        // Cards are pooled and reused (e.g. in the combat hand): drop the badge as soon as the card leaves this screen.
-        card.Connect(Node.SignalName.TreeExiting, Callable.From(() =>
-        {
-            if (GodotObject.IsInstanceValid(panel)) panel.QueueFree();
-        }), (uint)GodotObject.ConnectFlags.OneShot);
-    }
-
-    /// <summary>Top-left corner of the card frame, in the NCard's local coordinates.</summary>
-    private static Vector2 CardTopLeft(NCard card)
-    {
-        Vector2 fallback = -NCard.defaultSize / 2f; // NCard is laid out around its origin
-        try
-        {
-            if (card.GetNodeOrNull<Control>("%Frame") is Control frame && frame.IsInsideTree())
-            {
-                Vector2 p = card.GetGlobalTransform().AffineInverse() * frame.GetGlobalTransform().Origin;
-                if (Mathf.Abs(p.X) < 400f && Mathf.Abs(p.Y) < 400f) return p;
-            }
-        }
-        catch { /* use fallback */ }
-        return fallback;
-    }
-
-    private static Font? FindGameFont(NCard card)
-    {
-        try
-        {
-            if (card.FindChild("TitleLabel", true, false) is Label l) return l.GetThemeFont("font");
-        }
-        catch { /* cosmetic only */ }
-        return null;
     }
 
     // ---------------------------------------------------------------- patches & report
@@ -324,11 +195,11 @@ public static class TierOverlay
             try
             {
                 harmony.CreateClassProcessor(type).Patch();
-                PatchReport.Add($"OK   {type.Name}");
+                Report.Add($"OK   {type.Name}");
             }
             catch (Exception e)
             {
-                PatchReport.Add($"FAIL {type.Name}: {e.Message}");
+                Report.Add($"FAIL {type.Name}: {e.Message}");
                 GD.PrintErr($"[StsTierOverlay] Patch {type.Name} skipped (game version changed?): {e.Message}");
             }
         }
@@ -340,23 +211,24 @@ public static class TierOverlay
         try
         {
             TierData data = _data;
-            HashSet<string> gameCards = typeof(CardModel).Assembly.GetTypes()
-                .Where(t => !t.IsAbstract && typeof(CardModel).IsAssignableFrom(t))
-                .Select(t => Normalize(t.Name))
-                .ToHashSet();
-            List<string> unknown = data.RawNames.Where(n => !gameCards.Contains(Normalize(n))).ToList();
+            Type[] types = typeof(CardModel).Assembly.GetTypes().Where(t => !t.IsAbstract).ToArray();
+            string[] gameCards = types.Where(t => typeof(CardModel).IsAssignableFrom(t)).Select(t => t.Name).ToArray();
+            string[] gameRelics = types.Where(t => typeof(RelicModel).IsAssignableFrom(t)).Select(t => t.Name).ToArray();
+            List<string> unknownCards = TierData.Unknown(data.CardNames, gameCards);
+            List<string> unknownRelics = TierData.Unknown(data.RelicNames, gameRelics);
 
             var sb = new StringBuilder();
-            sb.AppendLine($"Card Tier Overlay v{Version} - {DateTime.Now:yyyy-MM-dd HH:mm}");
-            sb.AppendLine($"Data: {data.Source} (updated {data.Updated}), {data.Tiers.Count} cards with a tier");
-            sb.AppendLine($"Screens: {string.Join(", ", data.ScreenPatterns)}");
-            sb.AppendLine($"Cards found in the game: {gameCards.Count}");
+            sb.AppendLine($"Card & Relic Tier Overlay v{Version} - {DateTime.Now:yyyy-MM-dd HH:mm}");
+            sb.AppendLine($"Data: {data.Source} (updated {data.Updated})");
+            sb.AppendLine($"Cards:  {data.Cards.Count} with a tier, {gameCards.Length} in the game. Screens: {string.Join(", ", data.CardScreens)}");
+            sb.AppendLine($"Relics: {data.Relics.Count} with a tier, {gameRelics.Length} in the game. Screens: {string.Join(", ", data.RelicScreens)} + reward list");
             sb.AppendLine();
             sb.AppendLine("Components:");
-            foreach (string line in PatchReport) sb.AppendLine("  " + line);
+            foreach (string line in Report) sb.AppendLine("  " + line);
             sb.AppendLine();
-            sb.AppendLine($"Tier list names that do not exist in this game version ({unknown.Count}):");
-            sb.AppendLine("  " + (unknown.Count == 0 ? "(none)" : string.Join(", ", unknown)));
+            sb.AppendLine($"Tier list names that do not exist in this game version:");
+            sb.AppendLine($"  cards ({unknownCards.Count}):  " + (unknownCards.Count == 0 ? "(none)" : string.Join(", ", unknownCards)));
+            sb.AppendLine($"  relics ({unknownRelics.Count}): " + (unknownRelics.Count == 0 ? "(none)" : string.Join(", ", unknownRelics)));
             File.WriteAllText(Path.Combine(_modDir, StatusFile), sb.ToString(), new UTF8Encoding(false));
         }
         catch (Exception e)
@@ -366,42 +238,24 @@ public static class TierOverlay
     }
 }
 
-// The game switches to a separate, empty "modded" save profile whenever any mod is loaded.
-// This mod is purely visual, so keep using the normal profile (progress, timeline, unlocks) as long as
-// every loaded mod declares "affects_gameplay": false. Other gameplay mods keep the vanilla behaviour.
-internal static class NormalProfile
+/// <summary>
+/// Relic entries in the post-combat reward list. Kept in its own class so that, if a game update renames these
+/// types, only this feature stops working (the type load error is caught by the caller).
+/// </summary>
+internal static class RewardButtonHook
 {
-    internal static bool OnlyVisualModsLoaded() =>
-        ModManager.Mods
-            .Where(m => m.state == ModLoadState.Loaded)
-            .All(m => m.manifest != null && !m.manifest.affectsGameplay);
-}
+    private static readonly AccessTools.FieldRef<NRewardButton, Control>? IconContainer =
+        AccessTools.Field(typeof(NRewardButton), "_iconContainer") != null
+            ? AccessTools.FieldRefAccess<NRewardButton, Control>("_iconContainer")
+            : null;
 
-[HarmonyPatch(typeof(UserDataPathProvider), nameof(UserDataPathProvider.IsRunningModded), MethodType.Setter)]
-internal static class KeepNormalProfileSetterPatch
-{
-    private static void Prefix(ref bool value)
+    internal static void Evaluate(Control node)
     {
-        try { if (value && NormalProfile.OnlyVisualModsLoaded()) value = false; }
-        catch { /* fall back to the game's choice */ }
-    }
-}
-
-// Backup in case the tiny setter above got inlined by the JIT: enforce right before the profile path is chosen.
-[HarmonyPatch(typeof(SaveManager), nameof(SaveManager.InitProfileId))]
-internal static class KeepNormalProfileInitPatch
-{
-    private static void Prefix()
-    {
-        try
-        {
-            if (UserDataPathProvider.IsRunningModded && NormalProfile.OnlyVisualModsLoaded())
-            {
-                UserDataPathProvider.IsRunningModded = false;
-            }
-            if (!UserDataPathProvider.IsRunningModded)
-                GD.Print("[StsTierOverlay] Only visual mods loaded: using the normal save profile.");
-        }
-        catch { /* fall back to the game's choice */ }
+        if (node is not NRewardButton button || !GodotObject.IsInstanceValid(button) || !button.IsInsideTree()) return;
+        if (Badges.Has(button) || button.Reward is not RelicReward reward || reward.Relic == null) return;
+        string? tier = TierOverlay.RelicTier(reward.Relic);
+        if (tier == null) return;
+        Control? icon = IconContainer?.Invoke(button);
+        Badges.AddToRewardButton(button, icon, tier);
     }
 }

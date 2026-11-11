@@ -1,12 +1,12 @@
-# Publishes a tier list saved by tools/extract-tiers.js to data/tiers.json and pushes it to GitHub.
-# Every player's mod downloads it the next time they start the game.
+# Publishes tier lists saved by tools/extract-tiers.js to data/tiers.json and pushes them to GitHub.
+# Every player's mod downloads the result the next time they start the game.
 #
-#   .\tools\publish-tiers.ps1                 # newest sts2-tiers*.json in Downloads
-#   .\tools\publish-tiers.ps1 -Path file.json # a specific file
-#   .\tools\publish-tiers.ps1 -Yes            # no confirmation prompt
-#   .\tools\publish-tiers.ps1 -NoPush         # update and commit, but do not push
+#   .\tools\publish-tiers.ps1                       # newest sts2-cards*.json and sts2-relics*.json in Downloads
+#   .\tools\publish-tiers.ps1 -Path a.json, b.json  # specific files
+#   .\tools\publish-tiers.ps1 -Yes                  # no confirmation prompt
+#   .\tools\publish-tiers.ps1 -NoPush               # update and commit, but do not push
 param(
-    [string]$Path,
+    [string[]]$Path,
     [switch]$Yes,
     [switch]$NoPush
 )
@@ -14,6 +14,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $target = Join-Path $repo 'data\tiers.json'
+$minCount = @{ cards = 300; relics = 100 }
 
 function Get-DownloadsDir {
     try {
@@ -23,70 +24,93 @@ function Get-DownloadsDir {
     return Join-Path $env:USERPROFILE 'Downloads'
 }
 
-# Flattens { "Character": { "S": [cards] } } into @{ card = "Character/S" }.
-function Get-CardMap($data) {
+# Flattens any nesting into @{ slug = "Group/Tier" } (cards: "Ironclad/S", relics: "S").
+function Get-Map($node, [string]$prefix = '') {
     $map = @{}
-    foreach ($character in $data.PSObject.Properties) {
-        if ($character.Name.StartsWith('_')) { continue }
-        foreach ($tier in $character.Value.PSObject.Properties) {
-            foreach ($card in $tier.Value) { if (-not $map.ContainsKey($card)) { $map[$card] = "$($character.Name)/$($tier.Name)" } }
+    if ($null -eq $node) { return $map }
+    foreach ($p in $node.PSObject.Properties) {
+        if ($p.Name.StartsWith('_')) { continue }
+        $label = if ($prefix) { "$prefix/$($p.Name)" } else { $p.Name }
+        if ($p.Value -is [System.Array]) {
+            foreach ($slug in $p.Value) { if (-not $map.ContainsKey($slug)) { $map[$slug] = $label } }
+        } else {
+            $inner = Get-Map $p.Value $label
+            foreach ($k in $inner.Keys) { if (-not $map.ContainsKey($k)) { $map[$k] = $inner[$k] } }
         }
     }
     return $map
 }
 
-# 1) Pick the file
+# 1) Pick the files: newest of each kind ("a.json,b.json" also works when called through powershell -File)
+$Path = @($Path | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 if (-not $Path) {
     $downloads = Get-DownloadsDir
-    $file = Get-ChildItem -LiteralPath $downloads -Filter 'sts2-tiers*.json' -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if (-not $file) { throw "No sts2-tiers*.json in $downloads. Run tools/extract-tiers.js on the Mobalytics page first." }
-    $Path = $file.FullName
-}
-Write-Host "Source: $Path"
-
-# 2) Validate
-$new = Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
-$old = Get-Content -LiteralPath $target -Raw -Encoding UTF8 | ConvertFrom-Json
-$newCards = Get-CardMap $new
-$oldCards = Get-CardMap $old
-if ($newCards.Count -lt 300) { throw "Only $($newCards.Count) cards in the file (expected ~400+). Did the page finish loading?" }
-if (-not $new._updated) { throw 'The file has no _updated date.' }
-
-# 3) Show what changed
-$added   = @($newCards.Keys | Where-Object { -not $oldCards.ContainsKey($_) } | Sort-Object)
-$removed = @($oldCards.Keys | Where-Object { -not $newCards.ContainsKey($_) } | Sort-Object)
-$changed = @($newCards.Keys | Where-Object { $oldCards.ContainsKey($_) -and $oldCards[$_] -ne $newCards[$_] } | Sort-Object)
-
-Write-Host ''
-Write-Host "Cards: $($oldCards.Count) -> $($newCards.Count)   (data date $($old._updated) -> $($new._updated))"
-if ($added)   { Write-Host "Added ($($added.Count)):"     -ForegroundColor Green;  $added   | ForEach-Object { Write-Host "  + $_  [$($newCards[$_])]" } }
-if ($removed) { Write-Host "Removed ($($removed.Count)):" -ForegroundColor Red;    $removed | ForEach-Object { Write-Host "  - $_  [$($oldCards[$_])]" } }
-if ($changed) { Write-Host "Moved ($($changed.Count)):"   -ForegroundColor Yellow; $changed | ForEach-Object { Write-Host "  ~ $_  $($oldCards[$_]) -> $($newCards[$_])" } }
-if (-not ($added -or $removed -or $changed)) {
-    Write-Host 'No tier changes compared to the repo. Nothing to publish.' -ForegroundColor Cyan
-    exit 0
+    $Path = foreach ($kind in 'cards', 'relics') {
+        Get-ChildItem -LiteralPath $downloads -Filter "sts2-$kind*.json" -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
+    }
+    if (-not $Path) { throw "No sts2-cards*.json or sts2-relics*.json in $downloads. Run tools/extract-tiers.js on the Mobalytics pages first." }
 }
 
+$current = Get-Content -LiteralPath $target -Raw -Encoding UTF8 | ConvertFrom-Json
+$sections = [ordered]@{ cards = $current.cards; relics = $current.relics }
+$sources = [ordered]@{ cards = $current._sources.cards; relics = $current._sources.relics }
+$newest = $current._updated
+$summary = @()
+$anyChange = $false
+
+# 2) Validate each file and show what changed
+foreach ($file in $Path) {
+    $in = Get-Content -LiteralPath $file -Raw -Encoding UTF8 | ConvertFrom-Json
+    $kind = @('cards', 'relics') | Where-Object { $in.PSObject.Properties.Name -contains $_ } | Select-Object -First 1
+    if (-not $kind) { throw "$file has no 'cards' or 'relics' section." }
+    if (-not $in._updated) { throw "$file has no _updated date." }
+
+    $new = Get-Map $in.$kind
+    $old = Get-Map $sections[$kind]
+    if ($new.Count -lt $minCount[$kind]) { throw "Only $($new.Count) $kind in $file (expected more). Did the page finish loading?" }
+
+    $added   = @($new.Keys | Where-Object { -not $old.ContainsKey($_) } | Sort-Object)
+    $removed = @($old.Keys | Where-Object { -not $new.ContainsKey($_) } | Sort-Object)
+    $moved   = @($new.Keys | Where-Object { $old.ContainsKey($_) -and $old[$_] -ne $new[$_] } | Sort-Object)
+
+    Write-Host ''
+    Write-Host "$($kind.ToUpper()) from $(Split-Path -Leaf $file): $($old.Count) -> $($new.Count)"
+    if ($added)   { Write-Host "  Added ($($added.Count)):"     -ForegroundColor Green;  $added   | ForEach-Object { Write-Host "    + $_  [$($new[$_])]" } }
+    if ($removed) { Write-Host "  Removed ($($removed.Count)):" -ForegroundColor Red;    $removed | ForEach-Object { Write-Host "    - $_  [$($old[$_])]" } }
+    if ($moved)   { Write-Host "  Moved ($($moved.Count)):"     -ForegroundColor Yellow; $moved   | ForEach-Object { Write-Host "    ~ $_  $($old[$_]) -> $($new[$_])" } }
+
+    if ($added -or $removed -or $moved) {
+        $anyChange = $true
+        $sections[$kind] = $in.$kind
+        if ($in._source) { $sources[$kind] = $in._source }
+        if ([string]::CompareOrdinal($in._updated, $newest) -gt 0) { $newest = $in._updated }
+        $summary += "$kind +$($added.Count)/-$($removed.Count)/~$($moved.Count)"
+    } else {
+        Write-Host '  No changes.' -ForegroundColor Cyan
+    }
+}
+
+if (-not $anyChange) { Write-Host "`nNothing to publish." -ForegroundColor Cyan; exit 0 }
 if (-not $Yes) {
     $answer = Read-Host "`nPublish these changes to GitHub? (y/N)"
     if ($answer -notmatch '^(y|yes)$') { Write-Host 'Cancelled.'; exit 1 }
 }
 
-# 4) Write data/tiers.json, keeping the repo's own metadata (screen patterns) and the new date/source
+# 3) Write data/tiers.json, keeping the repo's screen patterns
 $out = [ordered]@{
-    _source  = if ($new._source) { $new._source } else { 'https://mobalytics.gg/slay-the-spire-2/tier-lists/cards' }
-    _updated = $new._updated
-    _screens = if ($old._screens) { @($old._screens) } else { @('CardReward', 'ChooseACard', 'Merchant') }
+    _updated = $newest
+    _sources = $sources
+    _screens = $current._screens
+    cards    = $sections.cards
+    relics   = $sections.relics
 }
-foreach ($p in $new.PSObject.Properties) { if (-not $p.Name.StartsWith('_')) { $out[$p.Name] = $p.Value } }
-$json = $out | ConvertTo-Json -Depth 5
-[IO.File]::WriteAllText($target, $json + "`n", (New-Object Text.UTF8Encoding $false))
+[IO.File]::WriteAllText($target, ($out | ConvertTo-Json -Depth 8) + "`n", (New-Object Text.UTF8Encoding $false))
 
-# 5) Commit and push
-$summary = "+$($added.Count) / -$($removed.Count) / ~$($changed.Count)"
+# 4) Commit and push
+$message = "Update tier lists from Mobalytics ($newest; $($summary -join ', '))"
 git -C $repo add data/tiers.json
-git -C $repo commit -q -m "Update tier list from Mobalytics ($($new._updated), $summary)"
+git -C $repo commit -q -m $message
 if ($LASTEXITCODE -ne 0) { throw 'git commit failed' }
 
 if ($NoPush) { Write-Host 'Committed. Not pushed (-NoPush).' -ForegroundColor Yellow; exit 0 }
@@ -96,4 +120,4 @@ if ($LASTEXITCODE -ne 0) {
     git -C $repo -c credential.helper= -c 'credential.helper=!gh auth git-credential' push -q
     if ($LASTEXITCODE -ne 0) { throw 'git push failed' }
 }
-Write-Host "Published ($summary). Players get it the next time they start the game." -ForegroundColor Green
+Write-Host "Published: $($summary -join ', '). Players get it the next time they start the game." -ForegroundColor Green

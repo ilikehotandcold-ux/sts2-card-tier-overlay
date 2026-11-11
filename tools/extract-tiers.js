@@ -1,55 +1,79 @@
-// Reads the Mobalytics Slay the Spire 2 card tier list and saves it in the format of data/tiers.json.
+// Reads a Mobalytics Slay the Spire 2 tier list (cards or relics) and saves it for tools/publish-tiers.ps1.
 //
-// Maintainer tool (see "Updating the tier list" in README.md). Run it on
-// https://mobalytics.gg/slay-the-spire-2/tier-lists/cards once the page has loaded, either:
-//  * as a bookmark: create a bookmark whose URL is the contents of tools/bookmarklet.txt, or
-//  * by pasting this whole file into the browser console (F12 > Console).
-//
-// It downloads sts2-tiers-YYYY-MM-DD.json to your Downloads folder; then run tools/publish-tiers.ps1.
+// Maintainer tool (see "Updating the tier lists" in README.md). Run it, once the page has loaded, on:
+//   https://mobalytics.gg/slay-the-spire-2/tier-lists/cards   -> saves sts2-cards-YYYY-MM-DD.json
+//   https://mobalytics.gg/slay-the-spire-2/tier-lists/relics  -> saves sts2-relics-YYYY-MM-DD.json
+// either as a bookmark (URL = contents of tools/bookmarklet.txt) or pasted into the browser console (F12).
 (() => {
-  if (!/mobalytics\.gg\/slay-the-spire-2\/tier-lists\/cards/.test(location.href)) {
-    alert('Open the Mobalytics card tier list first:\nhttps://mobalytics.gg/slay-the-spire-2/tier-lists/cards');
+  const kind = (location.pathname.match(/\/slay-the-spire-2\/tier-lists\/(cards|relics)/) || [])[1];
+  if (!kind) {
+    alert('Open one of the Mobalytics tier lists first:\n' +
+      'https://mobalytics.gg/slay-the-spire-2/tier-lists/cards\n' +
+      'https://mobalytics.gg/slay-the-spire-2/tier-lists/relics');
     return;
   }
   const main = document.querySelector('main') || document.body;
-  const walker = document.createTreeWalker(main, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
-  const seq = [];
-  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-    if (n.nodeType === Node.TEXT_NODE) {
-      const t = n.textContent.trim();
-      if (/^(S|A|B|C|D|TBD)$/.test(t) || /Tier List$/.test(t)) seq.push(t);
-    } else if (n.tagName === 'IMG') {
-      const m = (n.currentSrc || n.src).match(/cards\/(?:new\/)?([^\/?]+)\.webp/);
-      if (m) seq.push('#' + m[1]);
+  const slugOf = (img, folder) => {
+    const m = (img.currentSrc || img.src || '').match(new RegExp(folder + '\\/(?:new\\/)?([^\\/?]+)\\.webp'));
+    return m ? m[1] : null;
+  };
+
+  let data, count;
+  if (kind === 'cards') {
+    // Cards: one tier list per character, in page order: "<Character> Tier List", then tier labels and images.
+    const walker = document.createTreeWalker(main, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    const cards = {};
+    let character = null, tier = null;
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (n.nodeType === Node.TEXT_NODE) {
+        const t = n.textContent.trim();
+        if (/Tier List$/.test(t)) {
+          character = t.replace(/ Tier List$/, '');
+          if (character === 'Card') character = null; // page title
+          else cards[character] = cards[character] || {};
+        } else if (/^(S|A|B|C|D|TBD)$/.test(t)) {
+          tier = t;
+        }
+      } else if (n.tagName === 'IMG' && character && tier && tier !== 'TBD') {
+        const slug = slugOf(n, 'cards');
+        const list = slug && (cards[character][tier] = cards[character][tier] || []);
+        if (slug && !list.includes(slug)) list.push(slug);
+      }
     }
-  }
-  const tiers = {};
-  let character = null, tier = null;
-  for (const s of seq) {
-    if (s.endsWith('Tier List')) {
-      character = s.replace(/ Tier List$/, '');
-      if (character === 'Card') { character = null; continue; } // page title
-      tiers[character] = tiers[character] || {};
-    } else if (!s.startsWith('#')) {
-      tier = s;
-    } else if (character && tier && tier !== 'TBD') {
-      const list = (tiers[character][tier] = tiers[character][tier] || []);
-      if (!list.includes(s.slice(1))) list.push(s.slice(1));
+    data = { cards };
+    count = Object.values(cards).reduce((a, t) => a + Object.values(t).flat().length, 0);
+  } else {
+    // Relics: one list; each tier label sits in a row with its relic images. (Relic images in the article
+    // text above the rows are not inside a labelled row, so they are skipped.)
+    const relics = {};
+    const labels = [...main.querySelectorAll('*')].filter(e => e.children.length === 0 && /^(S|A|B|C|D)$/.test(e.textContent.trim()));
+    for (const label of labels) {
+      let row = label;
+      for (let i = 0; i < 8 && row && !row.querySelector('img[src*="relics/"]'); i++) row = row.parentElement;
+      if (!row) continue;
+      const tier = label.textContent.trim();
+      const list = (relics[tier] = relics[tier] || []);
+      for (const img of row.querySelectorAll('img')) {
+        const slug = slugOf(img, 'relics');
+        if (slug && !list.includes(slug)) list.push(slug);
+      }
     }
+    data = { relics };
+    count = Object.values(relics).flat().length;
   }
-  const count = Object.values(tiers).reduce((a, t) => a + Object.values(t).flat().length, 0);
+
   if (count < 50) {
-    alert('Only found ' + count + ' cards. Wait for the page to finish loading and try again.');
+    alert('Only found ' + count + ' ' + kind + '. Wait for the page to finish loading and try again.');
     return;
   }
   const date = new Date().toISOString().slice(0, 10);
-  // _screens is kept from the repo's current data/tiers.json by publish-tiers.ps1.
-  const json = JSON.stringify({ _source: location.href.split('#')[0], _updated: date, ...tiers }, null, 2);
+  const json = JSON.stringify({ _source: location.href.split('#')[0], _updated: date, ...data }, null, 2);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
-  a.download = 'sts2-tiers-' + date + '.json';
+  a.download = 'sts2-' + kind + '-' + date + '.json';
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
-  alert(count + ' cards saved to Downloads as ' + a.download + '.\nNext: run tools/publish-tiers.ps1');
+  alert(count + ' ' + kind + ' saved to Downloads as ' + a.download + '.\n' +
+    (kind === 'cards' ? 'Do the relics page too if it changed, then run' : 'Then run') + ' tools/publish-tiers.ps1');
 })();

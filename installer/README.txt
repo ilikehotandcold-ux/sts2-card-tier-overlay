@@ -1,15 +1,15 @@
-CARD TIER OVERLAY (Mobalytics) - Slay the Spire 2
-=================================================
+CARD & RELIC TIER OVERLAY (Mobalytics) - Slay the Spire 2
+=========================================================
 Made with Claude Code using Claude Opus 5.5 (high effort).
 
 What it does
-  Puts a badge with the Mobalytics tier (S, A, B, C, D) on the corner of
-  each card when:
-    - you pick a card reward after a fight
-    - an effect asks you to "choose a card"
-    - you are in the shop
+  Puts a small badge with the Mobalytics tier (S, A, B, C, D) on the
+  top-right corner of the cards and relics you are offered:
+    - card rewards and "choose a card" screens
+    - treasure chests, "choose a relic" screens and relic rewards
+    - the shop
   Colors:  S = red   A = orange   B = yellow   C = green   D = blue
-  Cards without a tier (basic, colorless, curses...) get no badge.
+  Things without a tier (basic cards, curses, unrated relics...) get no badge.
 
 Install
   1. Extract the whole zip anywhere.
@@ -24,7 +24,7 @@ Uninstall
 
 Tier list updates
   Automatic. Every time the game starts, the mod downloads the latest tier
-  list from the GitHub repo (if it is newer than yours). Nothing to do.
+  lists from the GitHub repo (if it is newer than yours). Nothing to do.
   If something looks wrong, check  mods\StsTierOverlay\status.txt
 
 Your progress
@@ -36,9 +36,10 @@ Your progress
 
 Editing tiers by hand
   mods\StsTierOverlay\tiers.txt  (JSON). English card name, lowercase with
-  dashes, under the letter you want. Create an empty file  no_update.txt
+  dashes, under the letter you want (sections "cards" and "relics"). Create an empty file  no_update.txt
   in that folder so it is not overwritten from GitHub.
-  Source: https://mobalytics.gg/slay-the-spire-2/tier-lists/cards
+  Sources: https://mobalytics.gg/slay-the-spire-2/tier-lists/cards
+           https://mobalytics.gg/slay-the-spire-2/tier-lists/relics
 
 Code and updates
   https://github.com/ilikehotandcold-ux/sts2-card-tier-overlay

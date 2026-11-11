@@ -26,13 +26,13 @@ jobs:
           fi
           last=$(curl -fsSL "https://raw.githubusercontent.com/${GH_REPO}/${GITHUB_REF_NAME}/data/tiers.json" | jq -r '._updated // "unknown"')
           gh issue create --title "$title" --body "$(cat <<BODY
-          Time to check whether the [Mobalytics card tier list](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards) changed.
+          Time to check whether the Mobalytics [card](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards) or [relic](https://mobalytics.gg/slay-the-spire-2/tier-lists/relics) tier lists changed.
           Current data in the repo is from **${last}**.
 
-          1. Open the tier list page and run \`tools/extract-tiers.js\` (bookmark or console).
+          1. Open each tier list page and run \`tools/extract-tiers.js\` (bookmark or console).
           2. Run \`.\tools\publish-tiers.ps1\`. It shows what changed and pushes it.
           3. Close this issue. If nothing changed, just close it.
 
-          Details: README > Updating the tier list.
+          Details: README > Updating the tier lists.
           BODY
           )"

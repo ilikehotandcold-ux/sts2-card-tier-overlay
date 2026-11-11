@@ -1,9 +1,9 @@
 {
   "id": "StsTierOverlay",
-  "name": "Card Tier Overlay (Mobalytics)",
+  "name": "Card & Relic Tier Overlay (Mobalytics)",
   "author": "ilikehotandcold-ux",
-  "description": "Shows the Mobalytics tier (S/A/B/C/D) on cards offered in card rewards, choose-a-card screens and the shop. Tier data syncs from GitHub at startup.\r\n\r\nMade with Claude Code using Claude Opus 5.5 (high effort).\r\n\r\nhttps://github.com/ilikehotandcold-ux/sts2-card-tier-overlay",
-  "version": "1.3.0",
+  "description": "Shows the Mobalytics tier (S/A/B/C/D) on cards and relics you are offered: card rewards, choose-a-card, treasure chests, relic rewards and the shop. Tier data syncs from GitHub at startup.\r\n\r\nMade with Claude Code using Claude Opus 5.5 (high effort).\r\n\r\nhttps://github.com/ilikehotandcold-ux/sts2-card-tier-overlay",
+  "version": "1.4.0",
   "has_pck": false,
   "has_dll": true,
   "dependencies": [],
