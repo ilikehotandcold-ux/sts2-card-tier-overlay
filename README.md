@@ -1,100 +1,110 @@
 # Card Tier Overlay for Slay the Spire 2
 
-Mod para **Slay the Spire 2** que muestra el tier de la [tier list de cartas de Mobalytics](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards) (**S / A / B / C / D**) en la esquina de cada carta que te ofrecen:
+> 🤖 **Made with [Claude Code](https://claude.com/claude-code) using Claude Opus 5.5 (high effort)**: code, installer, docs and everything else.
 
-- recompensa de carta tras un combate
-- pantallas de "elige una carta"
-- tienda del mercader
+A **Slay the Spire 2** mod that shows the tier from the [Mobalytics card tier list](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards) (**S / A / B / C / D**) on the corner of every card you are offered:
 
-| Tier | Color    |
-|------|----------|
-| S    | rojo     |
-| A    | naranja  |
-| B    | amarillo |
-| C    | verde    |
-| D    | azul     |
+- card rewards after a fight
+- "choose a card" screens
+- the merchant's shop
 
-Incluye las tier lists de Ironclad, Silent, Regent, Necrobinder, Defect y las cartas de multijugador (424 cartas). Las cartas sin tier (básicas, incoloras, maldiciones…) no llevan insignia. En combate no se muestra nada.
+| Tier | Color  |
+|------|--------|
+| S    | red    |
+| A    | orange |
+| B    | yellow |
+| C    | green  |
+| D    | blue   |
 
-*English: shows the Mobalytics card tier as a badge on cards in card rewards, choose-a-card screens and the shop. Download the zip from Releases, run `Instalar.bat`, launch the game.*
+It ships with the Ironclad, Silent, Regent, Necrobinder, Defect and multiplayer tier lists (424 cards). Cards without a tier (basic, colorless, curses…) get no badge. Nothing is shown during combat.
 
-## Instalar
+## Install
 
-1. Descarga `StsTierOverlay-vX.Y.Z.zip` desde [Releases](https://github.com/ilikehotandcold-ux/sts2-card-tier-overlay/releases/latest) y descomprímelo entero.
-2. Cierra el juego y haz doble clic en **`Instalar.bat`**.
-   - Busca el juego en tus bibliotecas de Steam.
-   - Si no lo encuentra, te pide que arrastres la carpeta que contiene `SlayTheSpire2.exe`.
-   - Si descomprimes el zip dentro o al lado de la carpeta del juego, también lo detecta.
-3. Abre el juego como siempre: Steam, `SlayTheSpire2.exe` o un `.bat`. Si pregunta si quieres cargar mods, acepta.
+1. Download `StsTierOverlay-vX.Y.Z.zip` from [Releases](https://github.com/ilikehotandcold-ux/sts2-card-tier-overlay/releases/latest) and extract the whole zip.
+2. Close the game and double-click **`Install.bat`**.
+   - It looks for the game in your Steam libraries.
+   - If it can't find it, it asks you to drag in the folder that contains `SlayTheSpire2.exe`.
+   - It also finds the game if you extract the zip inside or next to the game folder.
+3. Start the game as usual: Steam, `SlayTheSpire2.exe` or your own `.bat`. If it asks whether to load mods, say yes.
 
-Para quitarlo: **`Desinstalar.bat`**, o desactívalo en el menú *Mods* del juego.
+To remove it: **`Uninstall.bat`**, or disable it in the game's *Mods* menu.
 
-Instalación manual: copia la carpeta `StsTierOverlay` del zip en `Slay the Spire 2\mods\`.
+Manual install: copy the `StsTierOverlay` folder from the zip into `Slay the Spire 2\mods\`.
 
-## Cómo funciona
+## How it works
 
-Es un mod normal del cargador de mods que trae el juego (`mods/<id>/mod_manifest.json` + DLL). Da igual cómo se abra el juego: lo carga el propio `SlayTheSpire2.exe`.
+It is a regular mod for the game's built-in mod loader (`mods/<id>/mod_manifest.json` + DLL). It does not matter how the game is launched: `SlayTheSpire2.exe` loads it itself.
 
-- **Detección de cartas:** cada carta (`NCard`) que entra en pantalla se comprueba. Si alguno de sus contenedores tiene un tipo cuyo nombre contiene uno de los patrones de `_screens` (por defecto `CardReward`, `ChooseACard`, `Merchant`), recibe la insignia. Cuando la carta sale de esa pantalla, la insignia se borra; el juego recicla las cartas, así que no llega a tu mano.
-- **Emparejar cartas:** se compara el nombre de la clase de la carta (`PommelStrike`) con el de Mobalytics (`pommel-strike`), sin mayúsculas ni guiones. Funciona con el juego en cualquier idioma.
+- **Finding cards:** every card node (`NCard`) that enters the scene is checked. If one of its parents has a type name containing one of the `_screens` patterns (by default `CardReward`, `ChooseACard`, `Merchant`), it gets a badge. When the card leaves that screen the badge is removed; the game recycles card nodes, so badges never reach your hand.
+- **Matching cards:** the card's class name (`PommelStrike`) is compared with the Mobalytics name (`pommel-strike`), ignoring case and dashes. Works with the game in any language.
 
-### Preparado para futuras versiones
+### Built to survive game updates
 
-| Si después de una actualización… | Qué pasa | Cómo se arregla |
+| If after an update… | What happens | How to fix it |
 |---|---|---|
-| Mobalytics cambia la tier list | nada se rompe | actualiza `data/tiers.json` en el repo; a todos les llega al abrir el juego |
-| salen cartas nuevas | no llevan insignia | igual: añádelas a `data/tiers.json` |
-| el juego renombra una pantalla | esa pantalla se queda sin insignias | cambia `_screens` en `data/tiers.json`; se distribuye solo, sin recompilar |
-| cambia el sistema de guardado | el parche del perfil falla y el juego vuelve a su comportamiento normal (perfil `modded`) | recompilar |
+| Mobalytics changes the tier list | nothing breaks | in-game "Update tiers" button; optionally push it to `data/tiers.json` so everyone gets it |
+| new cards are added | they have no badge | same as above |
+| the game renames a screen | that screen shows no badges | change `_screens` in `data/tiers.json`; it is distributed automatically, no rebuild |
+| the save system changes | the profile patch fails and the game falls back to its normal behaviour (`modded` profile) | rebuild |
 
-- No se engancha a métodos internos de las pantallas. Los únicos parches de Harmony son los del perfil, y cada uno se aplica por separado: si uno falla, se registra y lo demás sigue funcionando.
-- Al arrancar, el mod descarga `data/tiers.json` de este repo (`raw.githubusercontent.com`, máximo 8 s) y lo guarda como `tiers.txt`. Sin conexión usa la última copia guardada o, si no hay, los datos incluidos en la DLL.
-- Escribe un diagnóstico en `mods\StsTierOverlay\estado.txt`: de dónde salen los datos, qué componentes van bien o fallan, y qué nombres de la tier list no existen en tu versión del juego.
+- No hooks into specific screen methods. The only Harmony patches are the profile ones, each applied separately: if one fails it is logged and everything else keeps working.
+- At startup the mod downloads `data/tiers.json` from this repo (`raw.githubusercontent.com`, 8 s timeout) and stores it as `tiers.txt` if it is newer than what you have. Offline it uses the last saved copy, or the data built into the DLL.
+- It writes a health report to `mods\StsTierOverlay\status.txt`: where the data came from, which components are OK or failed, and which tier list names do not exist in your game version.
 
-### Tu progreso
+### Your progress
 
-Cuando hay mods cargados, el juego usa un perfil `modded/` separado y vacío (sin Cronografía ni desbloqueos). Este mod declara `"affects_gameplay": false` y, **solo si todos los mods cargados son así**, mantiene tu perfil normal. Si cargas otro mod que sí cambie el juego, se respeta el comportamiento original.
+When mods are loaded, the game switches to a separate, empty `modded/` profile (no timeline, no unlocks). This mod declares `"affects_gameplay": false` and, **only if every loaded mod does the same**, keeps your normal profile. If you load any mod that changes gameplay, the original behaviour is kept.
 
-## Actualizar la tier list
+## Updating the tier list
 
-Mobalytics tiene protección anti-bots, así que la actualización se hace a mano desde tu navegador (unos segundos):
+Mobalytics blocks automated clients (Cloudflare), so the page is read by you, in your own browser. With the in-game button it takes two clicks:
 
-1. Abre la [tier list de Mobalytics](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards) y espera a que cargue.
-2. Pulsa F12, ve a *Console*, pega el contenido de [`tools/mobalytics-extract.js`](tools/mobalytics-extract.js) y pulsa Enter. El JSON queda copiado en el portapapeles.
-3. Pégalo sobre [`data/tiers.json`](data/tiers.json), haz commit y push. Todos los que tengan el mod lo reciben la próxima vez que abran el juego.
+1. On the game's main menu, click **"Update tiers"** (bottom left).
+   - **The first time** a help page opens: drag the **"Update STS2 tiers"** button to your bookmarks bar (`Ctrl+Shift+B` if you can't see it).
+   - After that, it opens the Mobalytics tier list directly.
+2. On Mobalytics, once the page has loaded, click the **"Update STS2 tiers"** bookmark. It downloads `sts2-tiers-DATE.json`.
+3. The game, which is waiting, picks the file up from your Downloads folder within a few seconds and loads the new tiers without restarting. The button shows "Updated: N cards".
 
-Formato:
+If you download the file while the game is closed, it is loaded the next time you start the game.
+
+To share it with everyone who has the mod: the bookmark also copies the JSON to your clipboard. Paste it over [`data/tiers.json`](data/tiers.json) on GitHub and commit. The data with the most recent `_updated` date always wins, so GitHub never overwrites a newer local update.
+
+Without the bookmark: paste [`tools/extract-tiers.js`](tools/extract-tiers.js) into the browser console (F12) on the Mobalytics page. Same result.
+
+`data/tiers.json` format:
 
 ```json
 {
+  "_updated": "2026-11-11",
   "_screens": ["CardReward", "ChooseACard", "Merchant"],
   "Ironclad": { "S": ["offering", "dominate"], "A": ["feed"] }
 }
 ```
 
-Para usar tus propios tiers solo en tu PC, edita `mods\StsTierOverlay\tiers.txt` y crea un archivo vacío `no_actualizar.txt` en la misma carpeta para que no se sobrescriba.
+To use your own tiers on your PC only, edit `mods\StsTierOverlay\tiers.txt` and create an empty `no_update.txt` in the same folder so GitHub does not overwrite it.
 
-## Compilar
+## Building
 
-Requisitos: .NET SDK 8 o superior y el juego instalado. No hace falta el SDK de .NET 9: se compila contra las librerías de runtime que trae el propio juego.
+Requirements: .NET SDK 8 or newer and the game installed. The .NET 9 SDK is not needed: the mod is compiled against the runtime assemblies that ship with the game.
 
 ```powershell
-.\build.ps1                                   # busca el juego en Steam o lo pregunta
+.\build.ps1                                   # finds the game via Steam or asks for it
 .\build.ps1 -GameDir "C:\Games\Slay the Spire 2"
 ```
 
-Genera `out/StsTierOverlay-vX.Y.Z.zip`, listo para compartir. Para publicarlo: `gh release create vX.Y.Z out/StsTierOverlay-vX.Y.Z.zip`.
+It produces `out/StsTierOverlay-vX.Y.Z.zip`, ready to share. To publish it: `gh release create vX.Y.Z out/StsTierOverlay-vX.Y.Z.zip`.
 
-Estructura:
+Layout:
 
 ```
-src/        código del mod (TierOverlay.cs) y mod_manifest.json
-data/       tiers.json: tier list + patrones de pantallas (lo que descarga el mod)
-installer/  Instalar.bat, Desinstalar.bat, instalar.ps1, LEEME.txt
-tools/      script para extraer la tier list de Mobalytics
+src/        mod code (TierOverlay.cs, TierUpdater.cs) and mod_manifest.json
+data/       tiers.json: tier list + screen patterns (what the mod downloads)
+installer/  Install.bat, Uninstall.bat, install.ps1, README.txt, update.html template
+tools/      extract-tiers.js: reads the Mobalytics tier list (bookmark / console)
 ```
 
-## Créditos
+## Credits
 
-- Tier list: [Mobalytics](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards). Este proyecto no está afiliado a Mobalytics ni a Mega Crit.
-- Código bajo licencia [MIT](LICENSE).
+- Made with [Claude Code](https://claude.com/claude-code) using **Claude Opus 5.5 (high effort)**.
+- Tier list: [Mobalytics](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards). This project is not affiliated with Mobalytics or Mega Crit.
+- Code under the [MIT](LICENSE) license.

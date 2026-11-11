@@ -24,28 +24,34 @@ namespace StsTierOverlay;
 ///  * Screen patterns and tiers live in a JSON file that is refreshed from GitHub at startup, so a renamed
 ///    screen or a new tier list can be fixed for everyone by editing data/tiers.json in the repo.
 ///  * The only Harmony patches (keeping the normal save profile) are applied one by one and may fail safely.
-///  * A health report (estado.txt) is written next to the DLL.
+///  * A health report (status.txt) is written next to the DLL.
 /// </summary>
 [ModInitializer(nameof(Init))]
 public static class TierOverlay
 {
-    public const string Version = "1.1.0";
+    public const string Version = "1.2.0";
     private const string RemoteUrl =
         "https://raw.githubusercontent.com/ilikehotandcold-ux/sts2-card-tier-overlay/main/data/tiers.json";
+    private const string MobalyticsUrl = "https://mobalytics.gg/slay-the-spire-2/tier-lists/cards";
     private const string LocalFile = "tiers.txt";        // .txt: the game reads every *.json in a mod folder as a manifest
-    private const string NoUpdateFile = "no_actualizar.txt";
-    private const string StatusFile = "estado.txt";
+    private const string NoUpdateFile = "no_update.txt";
+    private const string StatusFile = "status.txt";
+    private const string HelperPage = "update.html";
+    private const string BookmarkOkFile = "bookmark_ok.txt";
+    private const string DownloadPattern = "sts2-tiers*.json";
     private const string BadgeMeta = "moba_tier_badge";
 
-    private sealed class TierData
+    internal sealed class TierData
     {
         public Dictionary<string, string> Tiers = new();          // normalized card name -> "S".."D"
         public string[] ScreenPatterns = { "CardReward", "ChooseACard", "Merchant" };
         public List<string> RawNames = new();                    // for the health report
         public string Source = "";
+        public string Updated = "";                              // "yyyy-MM-dd" from "_updated"; newest wins
     }
 
     private static volatile TierData _data = new();
+    private static readonly object SaveLock = new();
     private static readonly List<string> PatchReport = new();
     private static string? _modDir;
 
@@ -65,6 +71,10 @@ public static class TierOverlay
         try { _data = LoadLocal(); }
         catch (Exception e) { GD.PrintErr($"[StsTierOverlay] Could not load tiers: {e}"); }
         GD.Print($"[StsTierOverlay] v{Version}: {_data.Tiers.Count} card tiers from {_data.Source}.");
+
+        // Picks up a file the bookmarklet downloaded while the game was closed.
+        try { TierUpdater.ImportFromDownloads(); }
+        catch (Exception e) { GD.PrintErr($"[StsTierOverlay] Downloads check failed: {e.Message}"); }
 
         ApplyPatches();
 
@@ -106,6 +116,11 @@ public static class TierOverlay
         using JsonDocument doc = JsonDocument.Parse(json);
         foreach (JsonProperty prop in doc.RootElement.EnumerateObject())
         {
+            if (prop.Name == "_updated" && prop.Value.ValueKind == JsonValueKind.String)
+            {
+                data.Updated = prop.Value.GetString() ?? "";
+                continue;
+            }
             if (prop.Name == "_screens" && prop.Value.ValueKind == JsonValueKind.Array)
             {
                 string[] patterns = prop.Value.EnumerateArray().Select(e => e.GetString() ?? "").Where(p => p.Length > 0).ToArray();
@@ -138,20 +153,44 @@ public static class TierOverlay
             http.DefaultRequestHeaders.UserAgent.ParseAdd("StsTierOverlay/" + Version);
             string json = await http.GetStringAsync(RemoteUrl).ConfigureAwait(false);
             TierData fresh = Parse(json, "GitHub");
-            if (fresh.Tiers.Count < 50) return; // refuse obviously broken data
-
-            string path = Path.Combine(_modDir, LocalFile);
-            string? old = File.Exists(path) ? File.ReadAllText(path) : null;
-            if (old != json) File.WriteAllText(path, json, new UTF8Encoding(false));
-            _data = fresh;
-            GD.Print($"[StsTierOverlay] Tiers updated from GitHub: {fresh.Tiers.Count} cards.");
-            WriteStatus();
+            if (TryApply(json, fresh))
+                GD.Print($"[StsTierOverlay] Tiers updated from GitHub: {fresh.Tiers.Count} cards ({fresh.Updated}).");
+            else
+                GD.Print($"[StsTierOverlay] GitHub tiers ({fresh.Updated}) are not newer than local ({_data.Updated}); kept local.");
         }
         catch (Exception e)
         {
             GD.Print($"[StsTierOverlay] Online update skipped ({e.GetType().Name}); using {_data.Source}.");
         }
     }
+
+    /// <summary>
+    /// Saves and activates new tier data unless what we already have is newer (by "_updated").
+    /// <paramref name="force"/> skips the date check (manual update from Mobalytics).
+    /// </summary>
+    internal static bool TryApply(string json, TierData fresh, bool force = false)
+    {
+        if (_modDir == null || fresh.Tiers.Count < 50) return false; // refuse obviously broken data
+        lock (SaveLock)
+        {
+            if (!force && string.CompareOrdinal(fresh.Updated, _data.Updated) < 0) return false;
+            string path = Path.Combine(_modDir, LocalFile);
+            string? old = File.Exists(path) ? File.ReadAllText(path) : null;
+            if (old != json) File.WriteAllText(path, json, new UTF8Encoding(false));
+            _data = fresh;
+        }
+        WriteStatus();
+        return true;
+    }
+
+    internal static TierData ParseFile(string json, string source) => Parse(json, source);
+    internal static string? ModDir => _modDir;
+    internal static int CardCount => _data.Tiers.Count;
+    internal static string DataDate => _data.Updated;
+    internal static string MobalyticsPage => MobalyticsUrl;
+    internal static string HelperPageFile => HelperPage;
+    internal static string BookmarkOk => BookmarkOkFile;
+    internal static string DownloadFilePattern => DownloadPattern;
 
     private static string Normalize(string s) =>
         new string(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
@@ -170,6 +209,10 @@ public static class TierOverlay
         {
             // Parent chain and Model are complete by the next idle step.
             Callable.From(() => Evaluate(card)).CallDeferred();
+        }
+        else if (node is Control menu && node.GetType().Name == "NMainMenu")
+        {
+            Callable.From(() => TierUpdater.AddButton(menu)).CallDeferred();
         }
     }
 
@@ -320,15 +363,15 @@ public static class TierOverlay
 
             var sb = new StringBuilder();
             sb.AppendLine($"Card Tier Overlay v{Version} - {DateTime.Now:yyyy-MM-dd HH:mm}");
-            sb.AppendLine($"Datos: {data.Source}, {data.Tiers.Count} cartas con tier");
-            sb.AppendLine($"Pantallas: {string.Join(", ", data.ScreenPatterns)}");
-            sb.AppendLine($"Cartas del juego detectadas: {gameCards.Count}");
+            sb.AppendLine($"Data: {data.Source} (updated {data.Updated}), {data.Tiers.Count} cards with a tier");
+            sb.AppendLine($"Screens: {string.Join(", ", data.ScreenPatterns)}");
+            sb.AppendLine($"Cards found in the game: {gameCards.Count}");
             sb.AppendLine();
-            sb.AppendLine("Componentes:");
+            sb.AppendLine("Components:");
             foreach (string line in PatchReport) sb.AppendLine("  " + line);
             sb.AppendLine();
-            sb.AppendLine($"Nombres de la tier list que no existen en esta version del juego ({unknown.Count}):");
-            sb.AppendLine("  " + (unknown.Count == 0 ? "(ninguno)" : string.Join(", ", unknown)));
+            sb.AppendLine($"Tier list names that do not exist in this game version ({unknown.Count}):");
+            sb.AppendLine("  " + (unknown.Count == 0 ? "(none)" : string.Join(", ", unknown)));
             File.WriteAllText(Path.Combine(_modDir, StatusFile), sb.ToString(), new UTF8Encoding(false));
         }
         catch (Exception e)
