@@ -240,8 +240,11 @@ public static class TierOverlay
             var sb = new StringBuilder();
             sb.AppendLine($"Card & Relic Tier Overlay v{Version} - {DateTime.Now:yyyy-MM-dd HH:mm}");
             sb.AppendLine($"Data: {data.Source} (updated {data.Updated})");
-            sb.AppendLine($"Cards:  {data.Cards.Count} with a tier, {gameCards.Length} in the game. Screens: {string.Join(", ", data.CardScreens)}");
-            sb.AppendLine($"Relics: {data.Relics.Count} with a tier, {gameRelics.Length} in the game. Screens: {string.Join(", ", data.RelicScreens)} + reward list");
+            sb.AppendLine($"Cards:  {data.Cards.Count} with a tier, {gameCards.Length} in the game.");
+            sb.AppendLine($"        Offer screens: {string.Join(", ", data.CardScreens)}");
+            sb.AppendLine($"        Browse screens: {string.Join(", ", data.CardBrowseScreens)}");
+            sb.AppendLine($"Relics: {data.Relics.Count} with a tier, {gameRelics.Length} in the game.");
+            sb.AppendLine($"        Offer screens: {string.Join(", ", data.RelicScreens)} + reward list, event options, tooltips");
             sb.AppendLine();
             sb.AppendLine("Components:");
             foreach (string line in Report) sb.AppendLine("  " + line);
