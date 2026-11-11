@@ -191,18 +191,27 @@ public static class TierOverlay
 
     internal static string? RelicTier(RelicModel model) => TierData.Lookup(_data.Relics, model.GetType().Name);
 
+    /// <summary>
+    /// True if an ancestor's type, or one of that type's game base classes, has a name containing a pattern.
+    /// Matching base classes means a pattern like "CardGridSelection" also covers every screen derived from it,
+    /// including ones added by future game updates.
+    /// </summary>
     private static bool InScreen(Node node, string[] patterns)
     {
         for (Node? n = node.GetParent(); n != null; n = n.GetParent())
         {
-            string typeName = n.GetType().Name;
-            foreach (string p in patterns)
+            for (Type? t = n.GetType(); t != null && t.Assembly != GodotAssembly; t = t.BaseType)
             {
-                if (typeName.Contains(p, StringComparison.OrdinalIgnoreCase)) return true;
+                foreach (string p in patterns)
+                {
+                    if (t.Name.Contains(p, StringComparison.OrdinalIgnoreCase)) return true;
+                }
             }
         }
         return false;
     }
+
+    private static readonly System.Reflection.Assembly GodotAssembly = typeof(Node).Assembly;
 
     // ---------------------------------------------------------------- patches & report
 

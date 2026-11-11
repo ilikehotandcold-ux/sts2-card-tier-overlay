@@ -8,12 +8,15 @@
     "cards": [
       "CardReward",
       "ChooseACard",
+      "ChooseABundle",
+      "SimpleCardSelect",
       "Merchant"
     ],
     "cardsBrowse": [
       "DeckView",
       "CardPileScreen",
       "InspectCard",
+      "CardGridSelection",
       "DeckCardSelect",
       "DeckUpgradeSelect",
       "DeckTransformSelect",

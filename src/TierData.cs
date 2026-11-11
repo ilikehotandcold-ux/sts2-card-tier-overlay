@@ -20,14 +20,14 @@ namespace StsTierOverlay;
 /// </summary>
 internal sealed class TierData
 {
-    public static readonly string[] DefaultCardScreens = { "CardReward", "ChooseACard", "Merchant" };
+    public static readonly string[] DefaultCardScreens =
+        { "CardReward", "ChooseACard", "ChooseABundle", "SimpleCardSelect", "Merchant" };
     public static readonly string[] DefaultRelicScreens = { "TreasureRoomRelic", "ChooseARelic", "Merchant" };
 
     /// <summary>Screens where you look at cards you already have: badges only for rated cards, no "?".</summary>
     public static readonly string[] DefaultCardBrowseScreens =
     {
-        "DeckView", "CardPileScreen", "InspectCard", "DeckCardSelect", "DeckUpgradeSelect",
-        "DeckTransformSelect", "DeckEnchantSelect", "CombatPileCardSelect", "HoverTipSet",
+        "DeckView", "CardPileScreen", "InspectCard", "CardGridSelection", "HoverTipSet",
     };
 
     public readonly Dictionary<string, string> Cards = new();   // normalized name -> "S".."D"

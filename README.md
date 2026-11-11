@@ -4,7 +4,7 @@
 
 A **Slay the Spire 2** mod that shows the tier from the Mobalytics [card](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards) and [relic](https://mobalytics.gg/slay-the-spire-2/tier-lists/relics) tier lists (**S / A / B / C / D**) as a small badge on everything you are offered:
 
-- **Cards:** card rewards after a fight, "choose a card" screens and the merchant. Also your deck, draw/discard pile views, upgrade/remove/transform choices, the card inspect screen and card previews in tooltips.
+- **Cards:** card rewards after a fight, "choose a card" screens (including event card choices), and the merchant. Also your deck, draw/discard pile views, upgrade/remove/transform choices, the card inspect screen and card previews in tooltips.
 - **Relics:** treasure chests, "choose a relic" screens (boss relics), relic rewards after elites, Neow and the other Ancients' relic options, the merchant, and **every relic tooltip** (hover a relic anywhere, including your relic bar).
 
 The badge sits on the top-right corner, so the energy cost stays visible. It's a dark disc with a colored ring and letter:
@@ -111,8 +111,8 @@ No new release or reinstall is needed for tier changes. A new release is only ne
   "_updated": "2026-11-11",
   "_sources": { "cards": "https://mobalytics.gg/…/cards", "relics": "https://mobalytics.gg/…/relics" },
   "_screens": {
-    "cards":       ["CardReward", "ChooseACard", "Merchant"],
-    "cardsBrowse": ["DeckView", "CardPileScreen", "InspectCard", "DeckCardSelect", "…", "HoverTipSet"],
+    "cards":       ["CardReward", "ChooseACard", "ChooseABundle", "SimpleCardSelect", "Merchant"],
+    "cardsBrowse": ["DeckView", "CardPileScreen", "InspectCard", "CardGridSelection", "…", "HoverTipSet"],
     "relics":      ["TreasureRoomRelic", "ChooseARelic", "Merchant"]
   },
   "cards":  { "Ironclad": { "S": ["offering", "dominate"], "A": ["feed"] } },
@@ -121,7 +121,7 @@ No new release or reinstall is needed for tier changes. A new release is only ne
 ```
 
 - Names are Mobalytics slugs (lowercase, dashes). Inside `cards` and `relics`, any grouping works: every list under an `S`/`A`/`B`/`C`/`D` key is read.
-- `_screens` lists type-name fragments of the screens that show badges: `cards`/`relics` for offers, `cardsBrowse` for screens where you look at your own cards. If a game update renames a screen, fix it here; no rebuild is needed.
+- `_screens` lists type-name fragments of the screens that show badges: `cards`/`relics` for offers, `cardsBrowse` for screens where you look at your own cards. A pattern also matches screens derived from a matching class (e.g. `CardGridSelection` covers every card grid selection screen). If a game update renames a screen, fix it here; no rebuild is needed.
 - To use your own tiers on one PC only, edit `mods\StsTierOverlay\tiers.txt` there and create an empty `no_update.txt` in the same folder so GitHub does not overwrite it.
 
 ## Building
