@@ -4,8 +4,8 @@
 
 A **Slay the Spire 2** mod that shows the tier from the Mobalytics [card](https://mobalytics.gg/slay-the-spire-2/tier-lists/cards) and [relic](https://mobalytics.gg/slay-the-spire-2/tier-lists/relics) tier lists (**S / A / B / C / D**) as a small badge on everything you are offered:
 
-- **Cards:** card rewards after a fight, "choose a card" screens, the merchant.
-- **Relics:** treasure chests, "choose a relic" screens, relic rewards after elites, the merchant.
+- **Cards:** card rewards after a fight, "choose a card" screens and the merchant. Also your deck, draw/discard pile views, upgrade/remove/transform choices, the card inspect screen and card previews in tooltips.
+- **Relics:** treasure chests, "choose a relic" screens (boss relics), relic rewards after elites, Neow and the other Ancients' relic options, the merchant, and **every relic tooltip** (hover a relic anywhere, including your relic bar).
 
 The badge sits on the top-right corner, so the energy cost stays visible. It's a dark disc with a colored ring and letter:
 
@@ -17,7 +17,9 @@ The badge sits on the top-right corner, so the energy cost stays visible. It's a
 | C    | green  |
 | D    | blue   |
 
-Ships with 424 card tiers (Ironclad, Silent, Regent, Necrobinder, Defect, multiplayer) and 166 relic tiers. Things without a tier (basic cards, curses, unrated relics…) get no badge. Nothing is shown during combat or in your relic bar.
+Ships with 424 card tiers (Ironclad, Silent, Regent, Necrobinder, Defect, multiplayer) and 166 relic tiers.
+
+Mobalytics doesn't rate everything (colorless cards, for example). When something unrated is **offered** to you, it gets a grey **?** badge, so you know the mod is working and there is simply no rating. While **browsing** (deck, piles, tooltips), unrated things get no badge, so Strikes and Defends stay clean. Cards in your hand during combat never get a badge.
 
 ## Install
 
@@ -36,7 +38,8 @@ Manual install: copy the `StsTierOverlay` folder from the zip into `Slay the Spi
 
 It is a regular mod for the game's built-in mod loader (`mods/<id>/mod_manifest.json` + DLL). It does not matter how the game is launched: `SlayTheSpire2.exe` loads it itself.
 
-- **Finding cards and relics:** every card node (`NCard`) and relic node (`NRelic`) that enters the scene is checked. If one of its parents has a type name containing one of the `_screens` patterns from `data/tiers.json` (cards: `CardReward`, `ChooseACard`, `Merchant`; relics: `TreasureRoomRelic`, `ChooseARelic`, `Merchant`), it gets a badge. Relic entries in the post-combat reward list are handled separately. Badges are removed when the node leaves the screen; the game recycles nodes, so badges never reach your hand or relic bar.
+- **Finding cards and relics:** every card node (`NCard`) and relic node (`NRelic`) that enters the scene is checked. If one of its parents has a type name containing one of the `_screens` patterns from `data/tiers.json`, it gets a badge: `cards` and `relics` are offer screens (unrated → "?"), `cardsBrowse` are screens where you look at cards you have (rated only). When a screen reuses a card node for another card (scrolling the deck, paging the inspect screen), the badge is refreshed. Relic rewards and Ancient/event options are recognised by their button types. Badges are removed when the node leaves the screen; the game recycles nodes, so badges never reach your hand.
+- **Tooltips:** a Harmony postfix on the game's tooltip builder (`NHoverTipSet.Init`) adds the badge to every relic tooltip.
 - **Matching names:** the game's class name (`PommelStrike`, `ChosenCheese`) is compared with the Mobalytics name (`pommel-strike`, `the-chosen-cheese`), ignoring case, dashes and a leading "the". Works with the game in any language.
 
 ### Built to survive game updates
@@ -48,7 +51,7 @@ It is a regular mod for the game's built-in mod loader (`mods/<id>/mod_manifest.
 | the game renames a screen | that screen shows no badges | change `_screens` in `data/tiers.json`; it is distributed automatically, no rebuild |
 | the save system changes | the profile patch fails and the game falls back to its normal behaviour (`modded` profile) | rebuild |
 
-- No hooks into specific screen methods. The only Harmony patches are the profile ones, each applied separately: if one fails it is logged and everything else keeps working.
+- No hooks into specific screen methods. The only Harmony patches are the tooltip one and the profile ones, each applied separately: if one fails it is logged in `status.txt` and everything else keeps working.
 - Tier data is fetched from this repo at every game start (see below), so most fixes are a data change, not a new release.
 - It writes a health report to `mods\StsTierOverlay\status.txt`: where the data came from, which components are OK or failed, and which tier list names do not exist in your game version.
 
@@ -108,8 +111,9 @@ No new release or reinstall is needed for tier changes. A new release is only ne
   "_updated": "2026-11-11",
   "_sources": { "cards": "https://mobalytics.gg/…/cards", "relics": "https://mobalytics.gg/…/relics" },
   "_screens": {
-    "cards":  ["CardReward", "ChooseACard", "Merchant"],
-    "relics": ["TreasureRoomRelic", "ChooseARelic", "Merchant"]
+    "cards":       ["CardReward", "ChooseACard", "Merchant"],
+    "cardsBrowse": ["DeckView", "CardPileScreen", "InspectCard", "DeckCardSelect", "…", "HoverTipSet"],
+    "relics":      ["TreasureRoomRelic", "ChooseARelic", "Merchant"]
   },
   "cards":  { "Ironclad": { "S": ["offering", "dominate"], "A": ["feed"] } },
   "relics": { "S": ["pocketwatch"], "A": ["kunai"] }
@@ -117,7 +121,7 @@ No new release or reinstall is needed for tier changes. A new release is only ne
 ```
 
 - Names are Mobalytics slugs (lowercase, dashes). Inside `cards` and `relics`, any grouping works: every list under an `S`/`A`/`B`/`C`/`D` key is read.
-- `_screens` lists type-name fragments of the screens that show badges. If a game update renames a screen, fix it here; no rebuild is needed.
+- `_screens` lists type-name fragments of the screens that show badges: `cards`/`relics` for offers, `cardsBrowse` for screens where you look at your own cards. If a game update renames a screen, fix it here; no rebuild is needed.
 - To use your own tiers on one PC only, edit `mods\StsTierOverlay\tiers.txt` there and create an empty `no_update.txt` in the same folder so GitHub does not overwrite it.
 
 ## Building
@@ -134,7 +138,8 @@ It produces `out/StsTierOverlay-vX.Y.Z.zip`, ready to share, and refreshes `tool
 Layout:
 
 ```
-src/        mod code: TierOverlay.cs (startup, sync, watcher), TierData.cs, Badges.cs, ProfilePatches.cs
+src/        mod code: TierOverlay.cs (startup, sync, watcher), TierData.cs, Badges.cs,
+            TooltipPatch.cs, ProfilePatches.cs
 data/       tiers.json: card + relic tier lists and screen patterns (what the mod downloads)
 installer/  Install.bat, Uninstall.bat, install.ps1, README.txt (zip contents)
 tools/      extract-tiers.js + bookmarklet.txt: read the Mobalytics pages

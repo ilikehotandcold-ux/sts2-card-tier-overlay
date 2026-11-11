@@ -11,7 +11,7 @@ namespace StsTierOverlay;
 /// <code>
 /// {
 ///   "_updated": "2026-11-11",
-///   "_screens": { "cards": ["CardReward", ...], "relics": ["TreasureRoomRelic", ...] },
+///   "_screens": { "cards": ["CardReward", ...], "cardsBrowse": ["DeckView", ...], "relics": ["TreasureRoomRelic", ...] },
 ///   "cards":  { "Ironclad": { "S": ["offering", ...], ... }, ... },
 ///   "relics": { "S": ["pocketwatch", ...], ... }
 /// }
@@ -23,11 +23,19 @@ internal sealed class TierData
     public static readonly string[] DefaultCardScreens = { "CardReward", "ChooseACard", "Merchant" };
     public static readonly string[] DefaultRelicScreens = { "TreasureRoomRelic", "ChooseARelic", "Merchant" };
 
+    /// <summary>Screens where you look at cards you already have: badges only for rated cards, no "?".</summary>
+    public static readonly string[] DefaultCardBrowseScreens =
+    {
+        "DeckView", "CardPileScreen", "InspectCard", "DeckCardSelect", "DeckUpgradeSelect",
+        "DeckTransformSelect", "DeckEnchantSelect", "CombatPileCardSelect", "HoverTipSet",
+    };
+
     public readonly Dictionary<string, string> Cards = new();   // normalized name -> "S".."D"
     public readonly Dictionary<string, string> Relics = new();
     public readonly List<string> CardNames = new();             // original slugs, for the health report
     public readonly List<string> RelicNames = new();
-    public string[] CardScreens = DefaultCardScreens;
+    public string[] CardScreens = DefaultCardScreens;          // offers: unrated cards get a "?" badge
+    public string[] CardBrowseScreens = DefaultCardBrowseScreens;
     public string[] RelicScreens = DefaultRelicScreens;
     public string Updated = "";                                 // "yyyy-MM-dd"; the newest data wins
     public string Source = "";
@@ -44,6 +52,7 @@ internal sealed class TierData
         if (root.TryGetProperty("_screens", out JsonElement screens) && screens.ValueKind == JsonValueKind.Object)
         {
             data.CardScreens = ReadPatterns(screens, "cards") ?? DefaultCardScreens;
+            data.CardBrowseScreens = ReadPatterns(screens, "cardsBrowse") ?? DefaultCardBrowseScreens;
             data.RelicScreens = ReadPatterns(screens, "relics") ?? DefaultRelicScreens;
         }
 

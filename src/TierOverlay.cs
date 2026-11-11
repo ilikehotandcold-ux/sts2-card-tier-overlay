@@ -17,7 +17,8 @@ namespace StsTierOverlay;
 
 /// <summary>
 /// Shows the Mobalytics tier (S/A/B/C/D) as a small badge on cards and relics you are offered:
-/// card rewards, "choose a card", treasure chests, "choose a relic", relic rewards and the merchant.
+/// card rewards, "choose a card", treasure chests, "choose a relic", relic rewards, Ancient (Neow) options and the
+/// merchant; plus your deck, card inspect screens and relic tooltips.
 ///
 /// Built to survive game updates:
 ///  * No hooks into specific screen methods. Every card/relic node that enters the scene tree is checked, and it
@@ -30,7 +31,7 @@ namespace StsTierOverlay;
 [ModInitializer(nameof(Init))]
 public static class TierOverlay
 {
-    public const string Version = "1.4.0";
+    public const string Version = "1.5.0";
     private const string RemoteUrl =
         "https://raw.githubusercontent.com/ilikehotandcold-ux/sts2-card-tier-overlay/main/data/tiers.json";
     private const string LocalFile = "tiers.txt";        // .txt: the game reads every *.json in a mod folder as a manifest
@@ -119,8 +120,15 @@ public static class TierOverlay
         switch (node)
         {
             case NCard card:
+                // Grids and inspect screens reuse card nodes and swap their model (e.g. scrolling the deck, paging
+                // through cards). The game clears ModelChanged when a card goes back to its pool, so subscribe again
+                // every time the card enters the tree (removing first so we never subscribe twice).
+                Action<CardModel?> onChange = CardHandlers.GetValue(card, c =>
+                    _ => Callable.From(() => Safe(() => EvaluateCard(c, refresh: true))).CallDeferred());
+                card.ModelChanged -= onChange;
+                card.ModelChanged += onChange;
                 // Parent chain and Model are complete by the next idle step.
-                Callable.From(() => Safe(() => EvaluateCard(card))).CallDeferred();
+                Callable.From(() => Safe(() => EvaluateCard(card, refresh: false))).CallDeferred();
                 break;
             case NRelic relic:
                 if (!relic.HasMeta(WatchMeta))
@@ -132,11 +140,17 @@ public static class TierOverlay
                 Callable.From(() => Safe(() => EvaluateRelic(relic, refresh: false))).CallDeferred();
                 break;
             default:
-                if (node is Control button && node.GetType().Name.Contains("RewardButton"))
-                    Callable.From(() => Safe(() => RewardButtonHook.Evaluate(button))).CallDeferred();
+                if (node is not Control control) break;
+                string typeName = node.GetType().Name;
+                if (typeName.Contains("RewardButton"))
+                    Callable.From(() => Safe(() => RewardButtonHook.Evaluate(control))).CallDeferred();
+                else if (typeName.Contains("EventOptionButton"))
+                    Callable.From(() => Safe(() => EventOptionHook.Evaluate(control))).CallDeferred();
                 break;
         }
     }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<NCard, Action<CardModel?>> CardHandlers = new();
 
     private static void Safe(Action action)
     {
@@ -144,12 +158,19 @@ public static class TierOverlay
         catch (Exception e) { GD.PrintErr($"[StsTierOverlay] {e.GetType().Name}: {e.Message}"); }
     }
 
-    private static void EvaluateCard(NCard card)
+    private static void EvaluateCard(NCard card, bool refresh)
     {
-        if (!GodotObject.IsInstanceValid(card) || !card.IsInsideTree() || Badges.Has(card)) return;
+        if (!GodotObject.IsInstanceValid(card) || !card.IsInsideTree()) return;
+        if (refresh) Badges.Remove(card);
+        else if (Badges.Has(card)) return;
+
         TierData data = _data;
-        if (card.Model == null || !InScreen(card, data.CardScreens)) return;
-        string? tier = TierData.Lookup(data.Cards, card.Model.GetType().Name);
+        if (card.Model == null) return;
+        // Offers (rewards, shop): every card gets a badge, "?" if Mobalytics has no rating (e.g. colorless cards).
+        // Browsing (deck, piles, inspect, tooltips): only rated cards, so Strikes and Defends stay clean.
+        bool offer = InScreen(card, data.CardScreens);
+        if (!offer && !InScreen(card, data.CardBrowseScreens)) return;
+        string? tier = TierData.Lookup(data.Cards, card.Model.GetType().Name) ?? (offer ? "?" : null);
         if (tier != null) Badges.AddToCard(card, tier);
     }
 
@@ -165,8 +186,7 @@ public static class TierOverlay
 
         TierData data = _data;
         if (!InScreen(relic, data.RelicScreens)) return;
-        string? tier = TierData.Lookup(data.Relics, model.GetType().Name);
-        if (tier != null) Badges.AddToRelic(relic, tier);
+        Badges.AddToRelic(relic, RelicTier(model) ?? "?");
     }
 
     internal static string? RelicTier(RelicModel model) => TierData.Lookup(_data.Relics, model.GetType().Name);
@@ -253,9 +273,32 @@ internal static class RewardButtonHook
     {
         if (node is not NRewardButton button || !GodotObject.IsInstanceValid(button) || !button.IsInsideTree()) return;
         if (Badges.Has(button) || button.Reward is not RelicReward reward || reward.Relic == null) return;
-        string? tier = TierOverlay.RelicTier(reward.Relic);
-        if (tier == null) return;
+        string tier = TierOverlay.RelicTier(reward.Relic) ?? "?";
         Control? icon = IconContainer?.Invoke(button);
         Badges.AddToRewardButton(button, icon, tier);
+    }
+}
+
+/// <summary>
+/// Event options that grant a relic, e.g. Neow and the other Ancients at the start of each act. Their tooltip
+/// leaves the relic itself out, so the badge goes on the option's relic icon. Own class for the same reason as
+/// <see cref="RewardButtonHook"/>.
+/// </summary>
+internal static class EventOptionHook
+{
+    internal static void Evaluate(Control node)
+    {
+        if (node is not MegaCrit.Sts2.Core.Nodes.Events.NEventOptionButton button) return;
+        if (!GodotObject.IsInstanceValid(button) || !button.IsInsideTree() || button.Option?.Relic == null) return;
+        string? tier = TierOverlay.RelicTier(button.Option.Relic);
+        if (tier == null) return;
+        if (button.GetNodeOrNull<TextureRect>("%RelicIcon") is TextureRect icon && icon.Visible)
+        {
+            if (!Badges.Has(icon)) Badges.AddAnchored(icon, tier, 30f, -10f);
+        }
+        else if (!Badges.Has(button))
+        {
+            Badges.AddAnchored(button, tier, 30f, 6f);
+        }
     }
 }

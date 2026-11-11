@@ -4,12 +4,14 @@ Made with Claude Code using Claude Opus 5.5 (high effort).
 
 What it does
   Puts a small badge with the Mobalytics tier (S, A, B, C, D) on the
-  top-right corner of the cards and relics you are offered:
-    - card rewards and "choose a card" screens
-    - treasure chests, "choose a relic" screens and relic rewards
-    - the shop
+  top-right corner of cards and relics:
+    - card rewards, "choose a card" screens and the shop
+    - your deck, pile views, upgrade/remove choices, card inspect screen
+    - treasure chests, boss relic choices, relic rewards, Neow's options
+    - every relic tooltip (hover a relic anywhere, even in your relic bar)
   Colors:  S = red   A = orange   B = yellow   C = green   D = blue
-  Things without a tier (basic cards, curses, unrated relics...) get no badge.
+  A grey "?" means the item is offered but Mobalytics doesn't rate it
+  (e.g. colorless cards). Nothing is shown on cards in your hand in combat.
 
 Install
   1. Extract the whole zip anywhere.

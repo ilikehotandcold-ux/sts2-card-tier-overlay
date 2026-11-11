@@ -19,6 +19,7 @@ internal static class Badges
         ["B"] = new Color("ffd93b"),
         ["C"] = new Color("6fd65a"),
         ["D"] = new Color("59a8ff"),
+        ["?"] = new Color("9a9a9a"), // offered but not rated by Mobalytics (e.g. colorless cards)
     };
 
     private static Font? _font; // the game's font, borrowed from the first card title we see
@@ -56,6 +57,31 @@ internal static class Badges
         Attach(relic, tier, size, corner + new Vector2(-size * 0.55f, -size * 0.45f));
     }
 
+    /// <summary>
+    /// Badge pinned to the top-right corner of <paramref name="target"/> with anchors, so it follows later resizes.
+    /// Used for tooltips and event option icons. Containers lay out their children, so if the target is a
+    /// container the badge goes on its first non-container child that covers it (e.g. a tooltip's background).
+    /// </summary>
+    internal static void AddAnchored(Control target, string tier, float size, float inset)
+    {
+        Control host = target;
+        if (host is Container)
+        {
+            Control? free = host.GetChildren().OfType<Control>().FirstOrDefault(c => c is not Container && c.Visible);
+            if (free == null) return;
+            host = free;
+        }
+        Panel panel = Attach(host, tier, size, Vector2.Zero);
+        panel.AnchorLeft = 1f;
+        panel.AnchorRight = 1f;
+        panel.AnchorTop = 0f;
+        panel.AnchorBottom = 0f;
+        panel.OffsetLeft = -size - inset;
+        panel.OffsetRight = -inset;
+        panel.OffsetTop = inset;
+        panel.OffsetBottom = inset + size;
+    }
+
     /// <summary>Badge on a reward-list button, on the top-right corner of its icon.</summary>
     internal static void AddToRewardButton(Control button, Control? icon, string tier)
     {
@@ -76,7 +102,7 @@ internal static class Badges
         catch { return null; }
     }
 
-    private static void Attach(Control host, string tier, float size, Vector2 position)
+    private static Panel Attach(Control host, string tier, float size, Vector2 position)
     {
         Color color = TierColors.TryGetValue(tier, out Color c) ? c : Colors.White;
 
@@ -124,5 +150,6 @@ internal static class Badges
         {
             if (GodotObject.IsInstanceValid(panel)) panel.QueueFree();
         }), (uint)GodotObject.ConnectFlags.OneShot);
+        return panel;
     }
 }

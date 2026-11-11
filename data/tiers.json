@@ -10,6 +10,17 @@
       "ChooseACard",
       "Merchant"
     ],
+    "cardsBrowse": [
+      "DeckView",
+      "CardPileScreen",
+      "InspectCard",
+      "DeckCardSelect",
+      "DeckUpgradeSelect",
+      "DeckTransformSelect",
+      "DeckEnchantSelect",
+      "CombatPileCardSelect",
+      "HoverTipSet"
+    ],
     "relics": [
       "TreasureRoomRelic",
       "ChooseARelic",
