@@ -27,7 +27,7 @@ internal sealed class TierData
     /// <summary>Screens where you look at cards you already have: badges only for rated cards, no "?".</summary>
     public static readonly string[] DefaultCardBrowseScreens =
     {
-        "DeckView", "CardPileScreen", "InspectCard", "CardGridSelection", "HoverTipSet",
+        "DeckView", "CardsViewScreen", "CardPileScreen", "InspectCard", "CardGridSelection", "HoverTipSet",
     };
 
     public readonly Dictionary<string, string> Cards = new();   // normalized name -> "S".."D"
@@ -95,13 +95,18 @@ internal sealed class TierData
     public static string Normalize(string s) =>
         new string(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 
-    /// <summary>Tier for a game class name, tolerating a leading "the" on either side (TheAbacus, ChosenCheese).</summary>
+    /// <summary>
+    /// Tier for a game class name, tolerating a leading "the" on either side (TheAbacus, ChosenCheese) and a
+    /// trailing "plus" on the tier list side: Mobalytics names some cards by their upgraded page
+    /// ("unrelenting-plus" for the Unrelenting card).
+    /// </summary>
     public static string? Lookup(Dictionary<string, string> tiers, string className)
     {
         string key = Normalize(className);
         if (tiers.TryGetValue(key, out string? t)) return t;
         if (tiers.TryGetValue("the" + key, out t)) return t;
         if (key.StartsWith("the") && tiers.TryGetValue(key[3..], out t)) return t;
+        if (tiers.TryGetValue(key + "plus", out t)) return t;
         return null;
     }
 
@@ -112,7 +117,9 @@ internal sealed class TierData
         return slugs.Where(s =>
         {
             string k = Normalize(s);
-            return !game.Contains(k) && !game.Contains("the" + k) && !(k.StartsWith("the") && game.Contains(k[3..]));
+            bool known = game.Contains(k) || game.Contains("the" + k) || (k.StartsWith("the") && game.Contains(k[3..]))
+                || (k.EndsWith("plus") && game.Contains(k[..^4]));
+            return !known;
         }).ToList();
     }
 }

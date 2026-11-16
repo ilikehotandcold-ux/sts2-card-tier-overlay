@@ -3,7 +3,7 @@
   "name": "Card & Relic Tier Overlay (Mobalytics)",
   "author": "ilikehotandcold-ux",
   "description": "Shows the Mobalytics tier (S/A/B/C/D) on cards and relics: rewards, shop, chests, Neow options, your deck, card inspect and relic tooltips. Tier data syncs from GitHub at startup.\r\n\r\nMade with Claude Code using Claude Opus 5.5 (high effort).\r\n\r\nhttps://github.com/ilikehotandcold-ux/sts2-card-tier-overlay",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "has_pck": false,
   "has_dll": true,
   "dependencies": [],

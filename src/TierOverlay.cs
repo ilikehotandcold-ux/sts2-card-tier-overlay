@@ -31,7 +31,7 @@ namespace StsTierOverlay;
 [ModInitializer(nameof(Init))]
 public static class TierOverlay
 {
-    public const string Version = "1.5.0";
+    public const string Version = "1.5.1";
     private const string RemoteUrl =
         "https://raw.githubusercontent.com/ilikehotandcold-ux/sts2-card-tier-overlay/main/data/tiers.json";
     private const string LocalFile = "tiers.txt";        // .txt: the game reads every *.json in a mod folder as a manifest
